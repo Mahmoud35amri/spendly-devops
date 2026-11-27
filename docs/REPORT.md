@@ -15,7 +15,7 @@ The API is **127 lines of code** (`server/app.js` + `server/db.js`, enforced < 1
 | Area | Tools |
 |---|---|
 | Code, tests | Node.js 24, Express 5, `node:sqlite`, `node:test` (12 integration tests on in-memory SQLite) |
-| Workflow | GitHub Issues (#8–#14), one branch + PR per task (#15–#22), PR template, squash merges |
+| Workflow | GitHub Issues (#8–#14), one branch + PR per task (#15–#23), PR template, squash merges |
 | CI/CD | GitHub Actions, GHCR, kind, kustomize |
 | Containers | Docker (single-stage `node:24-alpine`), docker compose |
 | Observability | prom-client, Prometheus 3, Grafana 13, pino, OpenTelemetry SDK, Jaeger 2 |
@@ -38,7 +38,7 @@ One workflow runs on every PR and every push to `main`: **Build & test** (instal
 
 ## 5. Security
 
-**SAST:** CodeQL `security-extended`. The first run found 3 issues: two routes serving files without a rate limit, and a hostname check in the PWA (`endsWith('github.io')`, which `evilgithub.io` would pass). All three were fixed. The gate initially missed them because it filtered on `level: error`, which CodeQL leaves unset; it now fails on any finding. **DAST:** ZAP API scan, driven by `openapi.yaml` and authenticated, against the live Kubernetes deployment: 119 rules passed, **0 High, 0 Medium**, 1 Low (HTML at `/`, expected) and 2 informational alerts; no payload produced a 5xx. **Built in:** the key is checked before the body is parsed; strict validation and size limits; parameterized SQL; CSP and security headers; CORS allowlist; a static-file allowlist (tests prove `server/`, `data/` and `.git` are never served); non-root image; Pod Security `restricted` with a read-only root filesystem and no capabilities.
+**SAST:** CodeQL `security-extended`. The first run found 3 issues: two routes serving files without a rate limit, and a hostname check in the PWA (`endsWith('github.io')`, which `evilgithub.io` would pass). All three were fixed. The gate initially missed them because it filtered on `level: error`, which CodeQL leaves unset; it now fails on any finding. The first full scan of `main` then found a **stored XSS in the PWA**: the currency setting syncs between devices and was inserted into `innerHTML` (plus a synced tier budget written into an attribute unescaped). Both were fixed; PR runs had missed it because CodeQL only reports changed lines on pull requests, so PRs now get the full analysis too. **DAST:** ZAP API scan, driven by `openapi.yaml` and authenticated, against the live Kubernetes deployment: 119 rules passed, **0 High, 0 Medium**, 1 Low (HTML at `/`, expected) and 2 informational alerts; no payload produced a 5xx. **Built in:** the key is checked before the body is parsed; strict validation and size limits; parameterized SQL; CSP and security headers; CORS allowlist; a static-file allowlist (tests prove `server/`, `data/` and `.git` are never served); non-root image; Pod Security `restricted` with a read-only root filesystem and no capabilities.
 
 ## 6. Kubernetes
 
@@ -47,7 +47,7 @@ The manifests in `k8s/` are applied with `kubectl apply -k k8s`: a namespace wit
 ## 7. Lessons learned
 
 1. **Rate limiting can break Kubernetes.** NodePort traffic is rewritten to the node's IP, the same IP the kubelet probes from. A limiter on `/api/health` would have answered probes with 429 under load (DAST is exactly that load) and pulled the pod out of service. The limiter now skips probes and scrapes, and a test guards it.
-2. **Check that your security gate can fail.** My first CodeQL gate passed with 3 findings because of how SARIF encodes severity. A gate that never fails proves nothing.
+2. **Check that your security gate can fail, and what it looks at.** My first CodeQL gate passed with 3 findings because of how SARIF encodes severity, and PR runs only looked at changed lines, hiding an XSS in older code until `main` was scanned.
 3. **Pin versions and read release notes.** Jaeger 2.23 dropped its legacy `/api`, so Grafana's Jaeger datasource and my first trace queries got 404s; `/api/v3` works.
 4. **Observability needs restraint.** The default HTTP logger wrote every header (including the sync key) and 1.5 KB per line; an allowlist fixed both. Labelling metrics by route template instead of the URL avoids unbounded series.
 5. **Portability is a design choice.** The Cloudflare version was simpler to deploy but impossible to containerize or observe. Keeping the contract stable made the port safe.

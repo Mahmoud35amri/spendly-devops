@@ -7,7 +7,7 @@ Both scans run in the pipeline ([.github/workflows/ci.yml](../../.github/workflo
 | | |
 |---|---|
 | Tool | GitHub CodeQL, language `javascript-typescript`, query suite **security-extended** |
-| Scope | the whole repository: server, PWA (`app.js`, `sw.js`), widget, scripts, tests |
+| Scope | the whole repository (server, PWA, widget, scripts, tests) on **every** run, pull requests included (`CODEQL_ACTION_DIFF_INFORMED_QUERIES=false`) |
 | Gate | any result fails the job (`SAST (CodeQL)` → *Fail on any finding*) |
 | Results | [Security → Code scanning](https://github.com/Mahmoud35amri/spendly-devops/security/code-scanning) |
 
@@ -23,7 +23,18 @@ Why the limiter skips two routes: with a NodePort, kube-proxy rewrites the clien
 
 The first version of the gate missed these results because it only counted results with `level: "error"`, and CodeQL leaves `level` unset for most rules. The gate now counts every result.
 
-### Current state: 0 findings
+### Full scan on `main` (after #20): stored XSS in the PWA, fixed in PR #23
+
+The pipeline on `main` turned red at SAST although every PR had been green. For pull requests, CodeQL reports only results on **changed lines** (diff-informed analysis); the push to `main` scans everything and found code from the original app:
+
+| Rule | Location | Problem | Fix |
+|---|---|---|---|
+| `js/xss-through-dom` | `app.js:206`, `:207`, `:208` (`view.innerHTML = renderToday()/renderMonth()/renderBudget()`) | the **currency** typed in Settings is stored, synced to every device with the same key, and inserted into `innerHTML` by `money()`. `<img src=x onerror=…>` as a currency would run on all those devices | `cur()` drops `& < > " ' \``: one place covers every sink, and values arriving by sync from older devices. (Escaping in `money()` would double-escape the toasts, which already escape their text.) |
+| `js/xss-through-dom` | `app.js:209` via `app.js:690` | synced `tierBudgets` values were written into `value="…"` unescaped; the server does not inspect record data, so a crafted value could close the attribute | `esc()` like the other fields |
+
+The SAST job now disables diff-informed analysis, so a PR is gated on exactly the same full analysis as `main`.
+
+### Current state: 0 findings (full scan)
 
 ## DAST: OWASP ZAP API scan
 
