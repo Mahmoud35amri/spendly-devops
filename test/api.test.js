@@ -1,5 +1,6 @@
 // Integration tests for the sync API: the real Express app on a random port, SQLite in memory.
 process.env.DB_PATH = ':memory:';
+process.env.LOG_LEVEL ??= 'silent';
 const { test, before, after } = require('node:test');
 const assert = require('node:assert/strict');
 const { app } = require('../server/app');
@@ -93,6 +94,16 @@ test('serves the PWA but never the server files or the database', async () => {
   for (const p of ['/server/app.js', '/package.json', '/schema.sql', '/data/spendly.db', '/.git/config', '/..%2fpackage.json']) {
     assert.equal((await fetch(base + p)).status, 404, p);
   }
+});
+
+test('exposes Prometheus metrics labelled by route template', async () => {
+  const text = await (await fetch(`${base}/metrics`)).text();
+  assert.match(text, /http_requests_total\{method="POST",route="\/api\/sync",status="200"\} \d+/);
+  assert.match(text, /http_requests_total\{method="POST",route="\/api\/sync",status="401"\} \d+/);
+  assert.match(text, /http_request_duration_seconds_bucket\{le="0.05",method="GET",route="\/api\/health"/);
+  assert.match(text, /spendly_sync_records_total\{direction="push"\} \d+/);
+  assert.match(text, /process_resident_memory_bytes/);
+  assert.doesNotMatch(text, /route="\/api\/sync\/[^"]/); // no raw URLs as labels
 });
 
 test('sends security headers', async () => {

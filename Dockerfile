@@ -8,7 +8,11 @@ LABEL org.opencontainers.image.source="https://github.com/Mahmoud35amri/spendly-
 
 ENV NODE_ENV=production \
     PORT=3000 \
-    DB_PATH=/data/spendly.db
+    DB_PATH=/data/spendly.db \
+    OTEL_SERVICE_NAME=spendly \
+    OTEL_TRACES_EXPORTER=otlp \
+    OTEL_METRICS_EXPORTER=none \
+    OTEL_LOGS_EXPORTER=none
 WORKDIR /app
 
 # Dependencies first, so this layer is reused until package*.json changes.
@@ -27,4 +31,4 @@ USER node
 EXPOSE 3000
 HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
   CMD wget -qO- http://127.0.0.1:3000/api/health || exit 1
-CMD ["node", "server/app.js"]
+CMD ["node", "--require", "./server/tracing.js", "server/app.js"]
