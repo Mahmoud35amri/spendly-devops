@@ -71,7 +71,7 @@ jobs:
           jq -r '.runs[].results[] | "- \(.ruleId) at \(.locations[0].physicalLocation.artifactLocation.uri):\(.locations[0].physicalLocation.region.startLine): \(.message.text)"' sarif/*.sarif >> "$GITHUB_STEP_SUMMARY"
           test "$total" -eq 0
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         if: always()
         with:
           name: codeql-sarif
@@ -102,7 +102,7 @@ jobs:
       - name: Save the image for the deploy job
         run: docker save "$IMAGE:sha-${GITHUB_SHA::7}" -o image.tar
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: image
           path: image.tar
@@ -122,7 +122,7 @@ jobs:
     steps:
       - uses: actions/checkout@v5
 
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           name: image
 
@@ -174,7 +174,7 @@ jobs:
           high=$(jq '[.site[].alerts[] | select((.riskcode | tonumber) >= 3)] | length' zap/zap-report.json)
           test "$high" -eq 0
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         if: always()
         with:
           name: zap-report
