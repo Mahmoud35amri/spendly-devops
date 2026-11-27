@@ -1,0 +1,23 @@
+# GET http://localhost:3000/metrics (excerpt, after scripts/traffic.js)
+process_resident_memory_bytes 104538112
+nodejs_eventloop_lag_p99_seconds 0.010313727
+# HELP http_requests_total HTTP requests handled
+# TYPE http_requests_total counter
+http_requests_total{method="GET",route="/api/health",status="200"} 5
+http_requests_total{method="POST",route="/api/sync",status="200"} 125
+http_requests_total{method="POST",route="/api/sync",status="401"} 13
+http_requests_total{method="POST",route="/api/sync",status="400"} 9
+http_requests_total{method="GET",route="/",status="200"} 25
+http_requests_total{method="GET",route="/metrics",status="200"} 29
+# HELP http_request_duration_seconds HTTP request duration in seconds
+# TYPE http_request_duration_seconds histogram
+http_request_duration_seconds_bucket{le="0.01",method="POST",route="/api/sync",status="200"} 107
+http_request_duration_seconds_bucket{le="0.025",method="POST",route="/api/sync",status="200"} 124
+http_request_duration_seconds_bucket{le="0.05",method="POST",route="/api/sync",status="200"} 125
+http_request_duration_seconds_bucket{le="+Inf",method="POST",route="/api/sync",status="200"} 125
+http_request_duration_seconds_sum{method="POST",route="/api/sync",status="200"} 1.0544068239999997
+http_request_duration_seconds_count{method="POST",route="/api/sync",status="200"} 125
+# HELP spendly_sync_records_total Records pushed to or pulled from the sync API
+# TYPE spendly_sync_records_total counter
+spendly_sync_records_total{direction="push"} 311
+spendly_sync_records_total{direction="pull"} 621
