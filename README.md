@@ -29,7 +29,7 @@
 | Tasks in GitHub Issues | One issue per task, labels + milestone *DevOps project delivery* | [Issues #8–#14](https://github.com/Mahmoud35amri/spendly-devops/issues?q=is%3Aissue+milestone%3A%22DevOps+project+delivery%22) |
 | Small backend / REST API (< 150 lines) | `server/app.js` + `server/db.js`: **127 lines of code**, checked by CI | CI job summary *Backend size* |
 | Git / GitHub | Feature branches, conventional commits, squash merges | [Commit history](https://github.com/Mahmoud35amri/spendly-devops/commits/main) |
-| One PR per task + peer review | PRs #15–#23, each linked to its issue, merged only when CI is green; [peer review guide](docs/PEER_REVIEW.md) | [Pull requests](https://github.com/Mahmoud35amri/spendly-devops/pulls?q=is%3Apr) |
+| One PR per task + peer review | PRs #15–#24, each linked to its issue, merged only when CI is green; [peer review guide](docs/PEER_REVIEW.md) | [Pull requests](https://github.com/Mahmoud35amri/spendly-devops/pulls?q=is%3Apr) |
 | CI/CD | GitHub Actions: build, test, scan, image, deploy, DAST | [Actions](https://github.com/Mahmoud35amri/spendly-devops/actions), [ci-pipeline.png](docs/evidence/ci-pipeline.png) |
 | Metrics | `GET /metrics` (Prometheus): request count, duration histogram, records synced, Node.js runtime | [metrics-sample.txt](docs/evidence/metrics-sample.txt), [dashboard](docs/evidence/grafana-dashboard.png) |
 | Structured logs | pino JSON, one line per request and error, with `trace_id` | [logs-sample.jsonl](docs/evidence/logs-sample.jsonl) |
@@ -296,7 +296,7 @@ The deployment target is a fresh kind cluster in the runner on every run (the br
 1. Every task is an **issue** (labels `backend`, `ci-cd`, `docker`, `observability`, `kubernetes`, `security`, `docs`; milestone *DevOps project delivery*).
 2. One **branch per issue** (`feat/…`, `ci/…`, `docs/…`) and **conventional commits** (`feat:`, `fix:`, `ci:`, `docs:`).
 3. One **pull request per issue**, using the [PR template](.github/pull_request_template.md) (what, why, how tested, review focus) and `Closes #n`.
-4. The pipeline must be **green** before merge; merges are squashed so `main` has one commit per task.
+4. **Branch protection on `main`**: changes go through a pull request, and the four pipeline checks (*Build & test*, *SAST (CodeQL)*, *Docker image*, *Deploy to Kubernetes (kind)*) must pass on the up-to-date branch before merge. Merges are squashed, so `main` has one commit per task.
 5. **Peer review**: [docs/PEER_REVIEW.md](docs/PEER_REVIEW.md) explains how to request and give a review, with a checklist and examples of constructive comments.
 
 | Issue | PR | Topic |
@@ -310,6 +310,7 @@ The deployment target is a fresh kind cluster in the runner on every run (the br
 | #9 | #21 | CI: artifact actions on Node 24 |
 | #14 | #22 | Documentation, report, evidence |
 | #13 | #23 | Fix stored XSS found by the full CodeQL scan; full scan on PRs |
+| #9 | #24 | Document branch protection |
 
 (Issues #1–#7 belonged to a first attempt on another codebase and were closed as *not planned*.)
 
