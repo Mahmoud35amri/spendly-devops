@@ -1,0 +1,42 @@
+name: CI/CD
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: Build & test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Install
+        run: npm ci
+
+      - name: Backend size guard (max 150 lines of code)
+        run: |
+          loc=$(cat server/*.js | grep -vcE '^\s*($|//)')
+          echo "server/ has $loc lines of code (blank lines and comments not counted)"
+          echo "### Backend size: $loc / 150 lines of code" >> "$GITHUB_STEP_SUMMARY"
+          test "$loc" -le 150
+
+      - name: Test (API integration tests + widget self-check)
+        run: node --test --test-reporter=spec
+
+      - name: Dependency audit
+        run: npm audit --omit=dev --audit-level=high
