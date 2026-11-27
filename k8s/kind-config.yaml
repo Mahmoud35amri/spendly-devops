@@ -1,0 +1,13 @@
+# kind create cluster --config k8s/kind-config.yaml
+# Publishes the NodePorts on the same host ports: app -> http://localhost:30080, Jaeger UI -> http://localhost:30686
+# (8080 is avoided on purpose: Oracle XE, Tomcat and many dev servers already use it.)
+kind: Cluster
+apiVersion: kind.x-k8s.io/v1alpha4
+name: spendly
+nodes:
+  - role: control-plane
+    extraPortMappings:
+      - containerPort: 30080
+        hostPort: 30080
+      - containerPort: 30686
+        hostPort: 30686
