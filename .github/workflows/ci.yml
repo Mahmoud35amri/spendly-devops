@@ -63,13 +63,13 @@ jobs:
           category: /language:javascript-typescript
           output: sarif
 
-      - name: Fail on error-level findings
+      - name: Fail on any finding
         run: |
+          # CodeQL leaves "level" unset for most rules, so the gate counts every result: fix it or exclude the rule on purpose.
           total=$(jq '[.runs[].results[]] | length' sarif/*.sarif)
-          errors=$(jq '[.runs[].results[] | select(.level == "error")] | length' sarif/*.sarif)
-          echo "### CodeQL: $total finding(s), $errors at error level" >> "$GITHUB_STEP_SUMMARY"
-          jq -r '.runs[].results[] | "- \(.level): \(.ruleId) at \(.locations[0].physicalLocation.artifactLocation.uri):\(.locations[0].physicalLocation.region.startLine)"' sarif/*.sarif >> "$GITHUB_STEP_SUMMARY"
-          test "$errors" -eq 0
+          echo "### CodeQL: $total finding(s)" >> "$GITHUB_STEP_SUMMARY"
+          jq -r '.runs[].results[] | "- \(.ruleId) at \(.locations[0].physicalLocation.artifactLocation.uri):\(.locations[0].physicalLocation.region.startLine): \(.message.text)"' sarif/*.sarif >> "$GITHUB_STEP_SUMMARY"
+          test "$total" -eq 0
 
       - uses: actions/upload-artifact@v4
         if: always()

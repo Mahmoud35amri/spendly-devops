@@ -112,3 +112,13 @@ test('sends security headers', async () => {
   assert.equal(res.headers.get('x-content-type-options'), 'nosniff');
   assert.equal(res.headers.get('x-powered-by'), null);
 });
+
+// Last on purpose: it uses up this IP's rate limit.
+test('rate limit covers every route except probes and scrapes', async () => {
+  for (let i = 0; i < 130; i++) assert.equal((await fetch(`${base}/api/health`)).status, 200);
+  const statuses = [];
+  for (let i = 0; i < 130; i++) statuses.push((await fetch(`${base}/index.html`)).status);
+  assert.ok(statuses.includes(429), 'static files are rate limited');
+  assert.equal((await fetch(`${base}/api/health`)).status, 200);
+  assert.equal((await fetch(`${base}/metrics`)).status, 200);
+});
