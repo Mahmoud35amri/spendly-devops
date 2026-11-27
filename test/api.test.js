@@ -24,7 +24,7 @@ const expense = (id, updatedAt, data = { amount: 4.5 }) => ({ kind: 'expense', i
 test('health reports the database', async () => {
   const res = await fetch(`${base}/api/health`);
   assert.equal(res.status, 200);
-  assert.deepEqual(await res.json(), { ok: true, db: true });
+  assert.deepEqual(await res.json(), { ok: true, db: true, version: 'dev' });
 });
 
 test('rejects a missing or malformed sync key', async () => {

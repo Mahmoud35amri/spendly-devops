@@ -95,7 +95,7 @@ jobs:
         run: echo "IMAGE=ghcr.io/${GITHUB_REPOSITORY,,}" >> "$GITHUB_ENV"
 
       - name: Build
-        run: docker build -t "$IMAGE:latest" -t "$IMAGE:sha-${GITHUB_SHA::7}" .
+        run: docker build --build-arg APP_VERSION="sha-${GITHUB_SHA::7}" -t "$IMAGE:latest" -t "$IMAGE:sha-${GITHUB_SHA::7}" .
 
       - name: Smoke test the container
         run: |
@@ -191,3 +191,34 @@ jobs:
         run: |
           kubectl -n spendly get all,pvc,configmap -o wide
           kubectl -n spendly logs deploy/spendly --tail=30
+
+  release:
+    name: Release to production (Render)
+    # Only an image that passed tests, SAST, the kind deployment and DAST reaches production.
+    needs: deploy
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    environment:
+      name: production
+      url: https://spendly.mahmoudamri.me
+    steps:
+      - name: Deploy this commit's image
+        env:
+          RENDER_DEPLOY_HOOK: ${{ secrets.RENDER_DEPLOY_HOOK }}
+        run: |
+          # imgURL makes Render pull the exact tag this run tested, not whatever "latest" is by then.
+          img=$(jq -rn --arg v "ghcr.io/${GITHUB_REPOSITORY,,}:sha-${GITHUB_SHA::7}" '$v|@uri')
+          curl -fsS -o /dev/null -X POST "$RENDER_DEPLOY_HOOK&imgURL=$img"
+
+      - name: Wait until production serves this commit
+        run: |
+          # The free instance may be asleep and the image pull takes a minute or two.
+          want="sha-${GITHUB_SHA::7}"
+          for i in $(seq 1 60); do
+            got=$(curl -fsS --max-time 60 https://spendly.mahmoudamri.me/api/health | jq -r .version) || got=down
+            echo "attempt $i: $got"
+            [ "$got" = "$want" ] && break
+            sleep 10
+          done
+          test "$got" = "$want"
+          echo "### Released \`$want\` to https://spendly.mahmoudamri.me" >> "$GITHUB_STEP_SUMMARY"

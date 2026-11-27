@@ -11,6 +11,8 @@ servers:
     description: npm start / docker compose
   - url: http://localhost:30080
     description: kind cluster
+  - url: https://spendly.mahmoudamri.me
+    description: production (Render)
 paths:
   /api/health:
     get:
@@ -25,6 +27,7 @@ paths:
                 properties:
                   ok: { type: boolean, example: true }
                   db: { type: boolean, example: true }
+                  version: { type: string, example: sha-9f7d4e5, description: "image tag of the running release (dev outside CI builds)" }
   /api/sync:
     post:
       summary: Push local changes and pull remote ones
