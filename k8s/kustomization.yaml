@@ -1,0 +1,13 @@
+# kubectl apply -k k8s
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: spendly
+resources:
+  - namespace.yaml
+  - config.yaml
+  - app.yaml
+  - jaeger.yaml
+images:
+  # CI replaces the tag with sha-<commit> so the cluster runs exactly the image it just built.
+  - name: ghcr.io/mahmoud35amri/spendly-devops
+    newTag: latest

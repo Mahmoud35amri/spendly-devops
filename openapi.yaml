@@ -9,7 +9,7 @@ info:
 servers:
   - url: http://localhost:3000
     description: npm start / docker compose
-  - url: http://localhost:8080
+  - url: http://localhost:30080
     description: kind cluster
 paths:
   /api/health:

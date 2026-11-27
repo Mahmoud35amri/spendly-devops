@@ -66,9 +66,63 @@ jobs:
           for i in $(seq 1 20); do curl -fsS localhost:3000/api/health && exit 0; sleep 1; done
           docker logs smoke; exit 1
 
+      - name: Save the image for the deploy job
+        run: docker save "$IMAGE:sha-${GITHUB_SHA::7}" -o image.tar
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: image
+          path: image.tar
+          retention-days: 1
+
       - name: Push to ghcr.io (main only)
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         run: |
           echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
           docker push --all-tags "$IMAGE"
           echo "### Published \`$IMAGE:sha-${GITHUB_SHA::7}\` and \`$IMAGE:latest\`" >> "$GITHUB_STEP_SUMMARY"
+
+  deploy:
+    name: Deploy to Kubernetes (kind)
+    needs: image
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: image
+
+      - name: Create a kind cluster
+        uses: helm/kind-action@v1
+        with:
+          config: k8s/kind-config.yaml
+          cluster_name: spendly
+
+      - name: Deploy this commit's image
+        run: |
+          image="ghcr.io/${GITHUB_REPOSITORY,,}:sha-${GITHUB_SHA::7}"
+          docker load -i image.tar
+          kind load docker-image "$image" --name spendly
+          sed -i "s/newTag: .*/newTag: sha-${GITHUB_SHA::7}/" k8s/kustomization.yaml
+          kubectl apply -k k8s
+          kubectl -n spendly rollout status deploy/spendly --timeout=180s
+          kubectl -n spendly rollout status deploy/jaeger --timeout=180s
+
+      - name: Smoke test through the NodePort
+        run: |
+          curl -fsS localhost:30080/api/health
+          key=$(openssl rand -hex 20)
+          curl -fsS -X POST localhost:30080/api/sync -H "Authorization: Bearer $key" \
+            -d '{"since":0,"changes":[{"kind":"expense","id":"ci","updatedAt":1,"data":{"amount":1}}]}' | grep -q '"id":"ci"'
+          curl -fsS localhost:30080/metrics | grep -q 'route="/api/sync",status="200"'
+          # Spans are exported in batches every few seconds: wait until the service shows up in Jaeger.
+          for i in $(seq 1 15); do curl -fsS localhost:30686/api/v3/services | grep -q spendly && break; sleep 2; done
+          curl -fsS localhost:30686/api/v3/services | grep -q spendly
+          echo "### Deployed \`sha-${GITHUB_SHA::7}\` to kind: health, sync, metrics and tracing OK" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Cluster state
+        if: always()
+        run: |
+          kubectl -n spendly get all,pvc,configmap -o wide
+          kubectl -n spendly logs deploy/spendly --tail=30

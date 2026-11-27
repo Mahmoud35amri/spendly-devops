@@ -1,0 +1,9 @@
+# Runtime settings. The app has no secrets: sync keys live on the devices and only their hashes are stored.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: spendly-config
+data:
+  LOG_LEVEL: info
+  RATE_LIMIT_PER_MIN: "120"
+  OTEL_EXPORTER_OTLP_ENDPOINT: http://jaeger:4318
