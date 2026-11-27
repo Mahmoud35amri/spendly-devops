@@ -148,6 +148,8 @@ jobs:
 
       - name: Smoke test through the NodePort
         run: |
+          # The pod can be Ready a moment before the NodePort path accepts connections: retry the first call.
+          for i in $(seq 1 30); do curl -fsS localhost:30080/api/health && break; sleep 2; done
           curl -fsS localhost:30080/api/health
           key=$(openssl rand -hex 20)
           curl -fsS -X POST localhost:30080/api/sync -H "Authorization: Bearer $key" \
