@@ -126,7 +126,8 @@
   function sameDay(a, b) { return a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate(); }
   function sameMonth(a, b) { return a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth(); }
   // Currency: TND (Tunisian dinar) uses 3 decimals (millimes) and is written after the amount.
-  const cur = () => state.settings.currency || 'TND';
+  // It is free text that syncs between devices and ends up in innerHTML, so HTML meta-characters are dropped.
+  const cur = () => (state.settings.currency || 'TND').replace(/[&<>"'`]/g, '') || 'TND';
   const decimals = () => (/^(TND|DT|د\.ت)$/i.test(cur()) ? 3 : 2);
   const suffixCur = () => cur().length > 1;
   const round = (v) => { const f = 10 ** decimals(); return Math.round(v * f) / f; };

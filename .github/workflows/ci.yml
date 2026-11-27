@@ -50,6 +50,10 @@ jobs:
     permissions:
       contents: read
       security-events: write
+    env:
+      # On pull requests CodeQL only reports results on changed lines by default, so a PR could pass while
+      # main fails on older code. Analyze the whole repository every time: the gate means the same everywhere.
+      CODEQL_ACTION_DIFF_INFORMED_QUERIES: "false"
     steps:
       - uses: actions/checkout@v5
 
