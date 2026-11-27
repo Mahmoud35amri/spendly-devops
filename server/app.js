@@ -37,6 +37,12 @@ function parseChanges(body) {
 
 const app = express();
 app.use(httpLogger, metricsMiddleware);
+// Per-IP limit on every route except probes and scrapes: with a NodePort they come from the node IP, like client
+// traffic, and a 429 on a probe would take the pod out of service.
+app.use(rateLimit({
+  windowMs: 60_000, limit: Number(process.env.RATE_LIMIT_PER_MIN ?? 120),
+  skip: (req) => req.path === '/api/health' || req.path === '/metrics',
+}));
 app.use(helmet({ contentSecurityPolicy: { directives: { upgradeInsecureRequests: null } } }));
 app.get('/metrics', metricsHandler);
 
@@ -53,9 +59,8 @@ api.use((req, res, next) => {
   if (req.method === 'OPTIONS') res.status(204).end(); else next();
 });
 api.get('/health', (_req, res) => res.json({ ok: true, db: healthy() }));
-// Limited per IP on /sync only: health probes share the node IP with NodePort traffic and must never get a 429.
 // The key is checked before the body is parsed, so anonymous clients cannot make the server read 3 MB.
-api.post('/sync', rateLimit({ windowMs: 60_000, limit: Number(process.env.RATE_LIMIT_PER_MIN ?? 120) }), (req, res, next) => {
+api.post('/sync', (req, res, next) => {
   const auth = req.get('Authorization') ?? '';
   const key = auth.startsWith('Bearer ') ? auth.slice(7).trim() : '';
   if (!KEY_RE.test(key)) return res.status(401).json({ error: 'unauthorized' });

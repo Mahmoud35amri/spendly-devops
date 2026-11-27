@@ -897,7 +897,7 @@
   // ---------- Cloud sync (offline-first) ----------
   // Every change is written to this device first and queued in state.sync.dirty. When online, the queue is
   // pushed to the server and newer changes from other devices are pulled. Conflicts: last write wins (updatedAt).
-  const SYNC_API = window.SPENDLY_API || (location.hostname.endsWith('github.io') ? 'https://spendly-m35a.pages.dev/api' : '/api');
+  const SYNC_API = window.SPENDLY_API || (location.hostname.endsWith('.github.io') ? 'https://spendly-m35a.pages.dev/api' : '/api');
   const KEY_RE = /^[A-Za-z0-9_-]{32,128}$/;
   const sync = { running: false, again: false, timer: null, status: navigator.onLine ? 'idle' : 'offline' };
 
