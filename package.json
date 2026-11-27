@@ -1,0 +1,19 @@
+{
+  "name": "spendly",
+  "version": "1.0.0",
+  "description": "Spendly expense tracker PWA and its offline-first sync API (Express + SQLite)",
+  "private": true,
+  "license": "ISC",
+  "engines": {
+    "node": ">=22.13"
+  },
+  "scripts": {
+    "start": "node server/app.js",
+    "test": "node --test"
+  },
+  "dependencies": {
+    "express": "^5.3.0",
+    "express-rate-limit": "^8.7.5",
+    "helmet": "^8.3.0"
+  }
+}

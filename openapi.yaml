@@ -1,0 +1,100 @@
+openapi: 3.0.3
+info:
+  title: Spendly sync API
+  version: 1.0.0
+  description: |
+    Offline-first sync for the Spendly expense tracker. Each device sends the records it changed
+    and receives every record changed on other devices since its last cursor.
+    A sync key (random, 32-128 characters) identifies a private vault; the server only stores its SHA-256 hash.
+servers:
+  - url: http://localhost:3000
+    description: npm start / docker compose
+  - url: http://localhost:8080
+    description: kind cluster
+paths:
+  /api/health:
+    get:
+      summary: Liveness and database check
+      responses:
+        "200":
+          description: Service is up
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok: { type: boolean, example: true }
+                  db: { type: boolean, example: true }
+  /api/sync:
+    post:
+      summary: Push local changes and pull remote ones
+      security:
+        - syncKey: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/SyncRequest" }
+            example:
+              since: 0
+              changes:
+                - kind: expense
+                  id: exp-1
+                  updatedAt: 1764240000000
+                  data: { amount: 4.5, cat: coffee, note: latte }
+      responses:
+        "200":
+          description: Records changed after `since` (at most 1000 per page)
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SyncResponse" }
+        "400": { $ref: "#/components/responses/Error" }
+        "401": { $ref: "#/components/responses/Error" }
+        "413": { $ref: "#/components/responses/Error" }
+        "429": { description: Rate limit exceeded (120 requests per minute per IP) }
+components:
+  securitySchemes:
+    syncKey:
+      type: http
+      scheme: bearer
+      description: The device sync key, 32-128 characters of [A-Za-z0-9_-]
+  responses:
+    Error:
+      description: Request rejected
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              error: { type: string, example: invalid change }
+  schemas:
+    Change:
+      type: object
+      required: [kind, id, updatedAt]
+      properties:
+        kind: { type: string, enum: [expense, category, settings, entry] }
+        id: { type: string, minLength: 1, maxLength: 64 }
+        updatedAt: { type: integer, minimum: 0, description: Client edit time in ms; the newest edit wins }
+        deleted: { type: boolean }
+        data: { description: Any JSON value, at most 4000 characters once serialized }
+    SyncRequest:
+      type: object
+      properties:
+        since: { type: integer, minimum: 0, description: Cursor returned by the previous sync }
+        changes:
+          type: array
+          maxItems: 500
+          items: { $ref: "#/components/schemas/Change" }
+    SyncResponse:
+      type: object
+      properties:
+        cursor: { type: integer, description: Pass back as `since` next time }
+        more: { type: boolean, description: True when another page is waiting }
+        records:
+          type: array
+          items:
+            allOf:
+              - $ref: "#/components/schemas/Change"
+              - type: object
+                properties:
+                  rev: { type: integer }

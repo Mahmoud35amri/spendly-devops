@@ -59,36 +59,18 @@ Budget amounts sync between devices with the rest of your settings.
 
 ## Offline-first cloud sync
 
-Every change is saved on the phone first, so the app works with no internet. Changes go into a queue (the cloud badge in the header shows how many are waiting). When the phone is back online, the queue uploads to a private **Cloudflare D1** database and changes made on other devices download.
+Every change is saved on the phone first, so the app works with no internet. Changes go into a queue (the cloud badge in the header shows how many are waiting). When the phone is back online, the queue uploads to the sync server and changes made on other devices download.
 
 - **Conflicts:** the most recent edit wins. Deletions sync too.
 - **Privacy:** each install gets a random sync key, and the server only stores a SHA-256 hash of it. *Settings → Copy link for another device* links a second phone or computer to the same data.
-- **Server code:** `functions/api/sync.js` (Cloudflare Pages Function), `schema.sql` (D1 tables), `wrangler.toml`.
-
-### Deploying
-
-Live at `https://spendly-m35a.pages.dev` (D1 `spendly-db`, id in `wrangler.toml`). To redeploy by hand after changes:
-
-```sh
-mkdir -p dist && cp -r index.html styles.css app.js icons.js sw.js manifest.webmanifest _headers icons dist/
-npx wrangler login
-npx wrangler d1 execute spendly-db --remote --file=schema.sql   # only when schema.sql changes
-npx wrangler pages deploy --branch=main
-```
-
-To deploy automatically on every push to `main` instead:
-
-1. In Cloudflare, go to **My Profile → API Tokens → Create Token → Create Custom Token**. Add the permissions **Account · Cloudflare Pages · Edit** and **Account · D1 · Edit**, then create the token.
-2. Copy your **Account ID** from the right side of **Workers & Pages → Overview**.
-3. In GitHub, open this repo's **Settings → Secrets and variables → Actions** and add two secrets: `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID`.
-4. Open **Actions → Deploy to Cloudflare → Run workflow**, or push to `main`.
-
-The workflow reuses the existing D1 database and Pages project (creating them if missing), applies the schema, deploys the app and API to `https://spendly-m35a.pages.dev`, and checks that `/api/health` responds. The GitHub Pages copy syncs to that same API.
+- **Server code:** `server/` (Express + SQLite through Node's built-in `node:sqlite`), `schema.sql` (tables), `openapi.yaml` (API contract). It is a port of the original Cloudflare Pages Function with the same endpoints, JSON and status codes, so the app needs no change.
 
 ## Run locally
 
+Requires Node.js 22.13 or later.
+
 ```sh
-mkdir -p dist && cp -r index.html styles.css app.js icons.js sw.js manifest.webmanifest _headers icons dist/
-npx wrangler d1 execute spendly-db --local --file=schema.sql
-npx wrangler pages dev          # app + API + local D1 on http://localhost:8788
+npm ci
+npm start      # app + API on http://localhost:3000, data in data/spendly.db
+npm test       # API integration tests + widget self-check
 ```
