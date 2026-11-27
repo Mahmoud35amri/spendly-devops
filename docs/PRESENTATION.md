@@ -57,6 +57,9 @@ Request rate, errors and latency (the RED method) per route and status, plus rec
 **How do logs and traces connect?**
 The OpenTelemetry pino instrumentation adds `trace_id`/`span_id` to every log line. Search the trace id in Jaeger to see the request's spans; the manual `sync.transaction` span shows time spent in SQLite.
 
+**What did CodeQL actually find?**
+First, two file routes without a rate limit and a weak `github.io` hostname check. Then the first full scan of `main` found a stored XSS in the PWA: the currency setting syncs to every device and was inserted into `innerHTML`. PR runs had missed it because CodeQL only reports changed lines on pull requests; the pipeline now runs the full analysis everywhere.
+
 **What does SAST find vs DAST?**
 SAST (CodeQL) reads the code without running it: injection, path traversal, unsafe regex, missing rate limit… DAST (ZAP) attacks the running service through its OpenAPI spec: missing headers, error leaks, injection by fuzzing. They catch different classes of bugs, which is why the pipeline runs both.
 

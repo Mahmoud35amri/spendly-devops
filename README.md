@@ -29,7 +29,7 @@
 | Tasks in GitHub Issues | One issue per task, labels + milestone *DevOps project delivery* | [Issues #8–#14](https://github.com/Mahmoud35amri/spendly-devops/issues?q=is%3Aissue+milestone%3A%22DevOps+project+delivery%22) |
 | Small backend / REST API (< 150 lines) | `server/app.js` + `server/db.js`: **127 lines of code**, checked by CI | CI job summary *Backend size* |
 | Git / GitHub | Feature branches, conventional commits, squash merges | [Commit history](https://github.com/Mahmoud35amri/spendly-devops/commits/main) |
-| One PR per task + peer review | PRs #15–#22, each linked to its issue, merged only when CI is green; [peer review guide](docs/PEER_REVIEW.md) | [Pull requests](https://github.com/Mahmoud35amri/spendly-devops/pulls?q=is%3Apr) |
+| One PR per task + peer review | PRs #15–#23, each linked to its issue, merged only when CI is green; [peer review guide](docs/PEER_REVIEW.md) | [Pull requests](https://github.com/Mahmoud35amri/spendly-devops/pulls?q=is%3Apr) |
 | CI/CD | GitHub Actions: build, test, scan, image, deploy, DAST | [Actions](https://github.com/Mahmoud35amri/spendly-devops/actions), [ci-pipeline.png](docs/evidence/ci-pipeline.png) |
 | Metrics | `GET /metrics` (Prometheus): request count, duration histogram, records synced, Node.js runtime | [metrics-sample.txt](docs/evidence/metrics-sample.txt), [dashboard](docs/evidence/grafana-dashboard.png) |
 | Structured logs | pino JSON, one line per request and error, with `trace_id` | [logs-sample.jsonl](docs/evidence/logs-sample.jsonl) |
@@ -254,7 +254,7 @@ More in [docs/evidence/logs-sample.jsonl](docs/evidence/logs-sample.jsonl).
 
 | Layer | Control |
 |---|---|
-| **SAST** | CodeQL (`security-extended`) on every push and PR; results in the [Security tab](https://github.com/Mahmoud35amri/spendly-devops/security/code-scanning); **any finding fails the build** |
+| **SAST** | CodeQL (`security-extended`) on the whole repo, on every push and PR; results in the [Security tab](https://github.com/Mahmoud35amri/spendly-devops/security/code-scanning); **any finding fails the build** |
 | **DAST** | OWASP ZAP API scan (driven by `openapi.yaml`, authenticated) against the service **deployed in Kubernetes**; **High risk alerts fail the build**; HTML/JSON/Markdown reports as artifacts |
 | **Dependencies** | `npm audit --omit=dev --audit-level=high` in CI |
 | **API** | sync key checked before the body is parsed; strict validation (kinds, sizes, counts); body limit 3 MB; per-IP rate limit; only the key's SHA-256 is stored; parameterized SQL only |
@@ -309,6 +309,7 @@ The deployment target is a fresh kind cluster in the runner on every run (the br
 | #13 | #20 | SAST + DAST |
 | #9 | #21 | CI: artifact actions on Node 24 |
 | #14 | #22 | Documentation, report, evidence |
+| #13 | #23 | Fix stored XSS found by the full CodeQL scan; full scan on PRs |
 
 (Issues #1–#7 belonged to a first attempt on another codebase and were closed as *not planned*.)
 
