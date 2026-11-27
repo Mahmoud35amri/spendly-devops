@@ -1,0 +1,13 @@
+# docker compose up --build   ->   app on http://localhost:3000
+services:
+  app:
+    build: .
+    image: ghcr.io/mahmoud35amri/spendly-devops:latest
+    ports:
+      - "3000:3000"
+    volumes:
+      - spendly-data:/data
+    restart: unless-stopped
+
+volumes:
+  spendly-data:

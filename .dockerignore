@@ -1,0 +1,12 @@
+# The Dockerfile copies files explicitly; this only keeps the build context small.
+.git
+.github
+node_modules
+data
+reports
+test
+widget
+k8s
+docs
+observability
+*.md
