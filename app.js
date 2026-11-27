@@ -687,7 +687,7 @@
 
       <div class="section-label">Tier limits (optional)</div>
       <div class="group">
-        ${TIER_KEYS.map((k) => `<label class="row"><i class="dot" style="background:${tierColor(k)}"></i><span class="grow">${TIERS[k].name}<small class="sub-line">${TIERS[k].hint}</small></span><input data-tier-budget="${k}" type="number" inputmode="decimal" min="0" step="any" value="${st.tierBudgets[k] || ''}" placeholder="No limit" /></label>`).join('')}
+        ${TIER_KEYS.map((k) => `<label class="row"><i class="dot" style="background:${tierColor(k)}"></i><span class="grow">${TIERS[k].name}<small class="sub-line">${TIERS[k].hint}</small></span><input data-tier-budget="${k}" type="number" inputmode="decimal" min="0" step="any" value="${esc(st.tierBudgets[k] || '')}" placeholder="No limit" /></label>`).join('')}
       </div>
 
       ${hist.length ? `<div class="section-label">History</div>
