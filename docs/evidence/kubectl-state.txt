@@ -1,0 +1,40 @@
+$ kubectl -n spendly get deploy,rs,pods,svc,pvc,configmap -o wide
+NAME                      READY   UP-TO-DATE   AVAILABLE   AGE   CONTAINERS   IMAGES                                        SELECTOR
+deployment.apps/jaeger    1/1     1            1           24m   jaeger       jaegertracing/jaeger:2.23.0                   app=jaeger
+deployment.apps/spendly   1/1     1            1           24m   spendly      ghcr.io/mahmoud35amri/spendly-devops:latest   app=spendly
+
+NAME                                 DESIRED   CURRENT   READY   AGE   CONTAINERS   IMAGES                                        SELECTOR
+replicaset.apps/jaeger-6ff7444b86    1         1         1       24m   jaeger       jaegertracing/jaeger:2.23.0                   app=jaeger,pod-template-hash=6ff7444b86
+replicaset.apps/spendly-586786948    1         1         1       12s   spendly      ghcr.io/mahmoud35amri/spendly-devops:latest   app=spendly,pod-template-hash=586786948
+replicaset.apps/spendly-744d45b669   0         0         0       19m   spendly      ghcr.io/mahmoud35amri/spendly-devops:latest   app=spendly,pod-template-hash=744d45b669
+replicaset.apps/spendly-756d58c644   0         0         0       24m   spendly      ghcr.io/mahmoud35amri/spendly-devops:latest   app=spendly,pod-template-hash=756d58c644
+
+NAME                          READY   STATUS    RESTARTS   AGE   IP            NODE                    NOMINATED NODE   READINESS GATES
+pod/jaeger-6ff7444b86-g8prz   1/1     Running   0          24m   10.244.0.5    spendly-control-plane   <none>           <none>
+pod/spendly-586786948-z9rlc   1/1     Running   0          12s   10.244.0.10   spendly-control-plane   <none>           <none>
+
+NAME              TYPE       CLUSTER-IP     EXTERNAL-IP   PORT(S)                          AGE   SELECTOR
+service/jaeger    NodePort   10.96.36.41    <none>        4318:32044/TCP,16686:30686/TCP   24m   app=jaeger
+service/spendly   NodePort   10.96.126.34   <none>        80:30080/TCP                     24m   app=spendly
+
+NAME                                 STATUS   VOLUME                                     CAPACITY   ACCESS MODES   STORAGECLASS   VOLUMEATTRIBUTESCLASS   AGE   VOLUMEMODE
+persistentvolumeclaim/spendly-data   Bound    pvc-890559df-5134-4371-9297-96fc45c1081b   1Gi        RWO            standard       <unset>                 24m   Filesystem
+
+NAME                         DATA   AGE
+configmap/kube-root-ca.crt   1      24m
+configmap/spendly-config     3      24m
+
+$ kubectl get namespace spendly --show-labels
+NAME      STATUS   AGE   LABELS
+spendly   Active   24m   kubernetes.io/metadata.name=spendly,pod-security.kubernetes.io/enforce=restricted
+
+$ kubectl -n spendly get pod -l app=spendly -o jsonpath=<securityContext, probes, resources>
+pod securityContext:       {"fsGroup":1000,"runAsGroup":1000,"runAsNonRoot":true,"runAsUser":1000,"seccompProfile":{"type":"RuntimeDefault"}}
+container securityContext: {"allowPrivilegeEscalation":false,"capabilities":{"drop":["ALL"]},"readOnlyRootFilesystem":true}
+resources:                 {"limits":{"cpu":"500m","memory":"256Mi"},"requests":{"cpu":"50m","memory":"96Mi"}}
+readinessProbe:            {"path":"/api/health","port":"http","scheme":"HTTP"}
+
+$ kubectl -n spendly logs deploy/spendly --tail=3
+{"level":30,"time":1795804982787,"pid":1,"hostname":"spendly-586786948-z9rlc","req":{"id":10,"method":"POST","url":"/api/sync","ip":"::ffff:10.244.0.1","userAgent":"node"},"trace_id":"2ed9b7eedffa699664915f2b5ff127c9","span_id":"e3c80c4e3a5c0ebb","trace_flags":"01","res":{"statusCode":200},"responseTime":17,"msg":"request completed"}
+{"level":30,"time":1795804982795,"pid":1,"hostname":"spendly-586786948-z9rlc","req":{"id":11,"method":"GET","url":"/","ip":"::ffff:10.244.0.1","userAgent":"node"},"trace_id":"1bb6295f1dab4485d74430dce92e1373","span_id":"f09602b944f84fd6","trace_flags":"01","res":{"statusCode":200},"responseTime":3,"msg":"request completed"}
+{"level":30,"time":1795804983514,"pid":1,"hostname":"spendly-586786948-z9rlc","req":{"id":13,"method":"POST","url":"/api/sync","ip":"::ffff:10.244.0.1","userAgent":"node"},"trace_id":"3a838d5f3d9f07b7cf300d9078e82b14","span_id":"499d8047dc9a343e","trace_flags":"01","res":{"statusCode":200},"responseTime":8,"msg":"request completed"}

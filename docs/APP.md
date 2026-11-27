@@ -1,0 +1,67 @@
+<!-- User guide of the Spendly app, moved from the original Expenses-track README. The DevOps documentation is in ../README.md. -->
+# Spendly: expense tracker web app
+
+A modern, installable web app (PWA) for iPhone that tracks your **daily** and **monthly** spending and groups it into three **tiers**:
+
+| Tier | Meaning | Default categories |
+|---|---|---|
+| Essential | Needs | Groceries, Housing, Bills, Transport, Fuel, Health |
+| Lifestyle | Wants | Dining, Coffee, Shopping, Entertainment, Subscriptions, Other |
+| Luxury | Extras | Travel, Electronics, Gifts |
+
+Amounts are in **Tunisian dinars (TND)** with 3 decimals (millimes); you can change the currency in Settings. You can add, delete, or move categories between tiers in **Settings**, and set monthly budgets for the whole month or for each tier.
+
+There is no server and no account. Your data stays on your phone, and the app works offline. You can export a CSV or a JSON backup from Settings.
+
+**Live app:** https://mahmoud35amri.github.io/Expenses-track/
+
+## Double-tap the back of your iPhone to add an expense
+
+1. Open **Shortcuts**, tap **+**, and add the **Open URLs** action with `https://<your-site>/#add`. Name the shortcut **Add Expense**.
+2. Go to **Settings → Accessibility → Touch → Back Tap → Double Tap** and choose **Add Expense**.
+3. Double-tap the back of the phone. The amount keypad and category picker open right away. Tap the amount, pick a category, then tap **Save**.
+
+> iOS opens shortcut URLs in **Safari**, and Safari keeps its data separately from Home Screen web apps. To keep all your expenses in one place, use Spendly in Safari. When you add it to the Home Screen, turn **Open as Web App** off (iOS 26 and later) so the icon also opens in Safari.
+
+**Save without opening the form:** `https://<your-site>/#add?amount=4.500&cat=coffee&note=latte` saves the expense instantly. Inside a shortcut, you can use *Ask for Input* and *Choose from Menu* to fill in these values.
+
+## iPhone widget
+
+iOS doesn't allow widgets for web apps, so Spendly's widget runs in the free **Scriptable** app. It reads your synced expenses and never changes them.
+
+| Size | Shows |
+|---|---|
+| Small | Today's total, days left in the month, and what's left of this month's allowance. The bar turns amber when you're on pace to go over and red once you are over. |
+| Medium | The same, plus this month split by tier and an **+ Add** button |
+| Large | The same, plus your latest 5 expenses (4 when a monthly budget is set) |
+| Lock Screen | Today's and this month's totals |
+
+1. Install **Scriptable** from the App Store.
+2. On the iPhone, open https://mahmoud35amri.github.io/Expenses-track/widget/spendly-loader.js, then long-press the text, tap **Select All**, and **Copy**. In Scriptable, tap **+**, paste, and name the script **Spendly**.
+3. In Spendly, tap **Settings → Copy link for another device**. In Scriptable, run the **Spendly** script and paste the link. Use **Preview** to see each size.
+4. Long-press the Home Screen, tap **Edit → Add Widget → Scriptable**, choose a size, and add it. Then long-press the widget, tap **Edit Widget**, and set **Script** to **Spendly**.
+
+The widget refreshes about every 15 minutes (iOS picks the exact time). Tapping it opens Spendly in Safari. When the phone is offline, it shows the last data it downloaded and says "offline". To check the widget code: `node widget/widget.test.js`.
+
+The script you paste is a small loader. Each time it runs, it downloads `widget/spendly-widget.js` from the site, so changes to the widget go live about 30 minutes after a push, without touching Scriptable. If you set up the widget before the loader existed, replace the **Spendly** script's contents with the loader once. You don't need to link it again.
+
+## Budget tab
+
+- **Current balance and savings:** enter them once. The balance goes down automatically as you add expenses (only expenses dated after you entered it count), so the app always shows an estimated balance. **Overall** is balance plus savings.
+- **Monthly allowance:** how much you can spend each month. A month without its own allowance uses the previous month's.
+- **Month analysis:** left to spend, spending per day to stay on budget, a projected month total from your pace (after the first 5 days), your expected balance at month end, the biggest category, comparison with the previous month, and warnings for tier limits.
+- **Spending by category and tier** for any month, plus a **History** of the last 6 months showing how much you saved or overspent against each allowance.
+
+**Add money and activity log:** *Add money to balance* (salary, gifts, refunds) and *Add to savings* (new money, or moved from your balance) record each addition with an amount, note and date. The balance and savings totals update automatically. Every addition, move and manual correction is listed under **Activity**, and you can tap an entry to delete a mistake. Entries sync between devices.
+
+**Monthly bills:** categories paid once a month (Housing, Subscriptions and Bills by default; change them under *Budget → Monthly bills*, or tick *Paid once a month* when creating a category) count in monthly totals, tiers and categories. They are left out of "Spent today", the daily average, the daily chart and the spending forecast. Bills paid last month but not yet this month are kept aside when working out how much you can spend per day.
+
+Budget amounts sync between devices with the rest of your settings.
+
+## Offline-first cloud sync
+
+Every change is saved on the phone first, so the app works with no internet. Changes go into a queue (the cloud badge in the header shows how many are waiting). When the phone is back online, the queue uploads to the sync server and changes made on other devices download.
+
+- **Conflicts:** the most recent edit wins. Deletions sync too.
+- **Privacy:** each install gets a random sync key, and the server only stores a SHA-256 hash of it. *Settings → Copy link for another device* links a second phone or computer to the same data.
+- **Server code:** `server/` (Express + SQLite through Node's built-in `node:sqlite`), `schema.sql` (tables), `openapi.yaml` (API contract). It is a port of the original Cloudflare Pages Function with the same endpoints, JSON and status codes, so the app needs no change.
