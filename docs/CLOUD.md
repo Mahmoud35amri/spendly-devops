@@ -35,6 +35,16 @@ flowchart LR
 
 Rollback means reverting the change on `main`, or running `spendly-deploy <older commit of main>` on the server.
 
+## Moving from the Cloudflare server
+
+Before this deployment, the app synced with a Cloudflare Pages Function and its D1 database (`https://spendly-m35a.pages.dev/api`). Existing devices and device links (`…#link=<sync key>`) carry over with no export step:
+
+1. **Server: import on first contact.** The production ConfigMap sets `LEGACY_API` to the old API. The first time the new server sees a sync key, it pulls that key's records from the old API with the same key, page by page, and stores them. Then it answers the request. If the old API fails, the request fails (500) before the vault exists, and the device's next sync retries. A key seen once is never imported again.
+2. **Client: re-upload on a server change.** Revision cursors only mean something on the server that issued them. When the app's sync server changes, it starts again from cursor 0 and re-uploads everything it holds once. The server keeps the newest copy of each record (`updatedAt`), so a change a device sent to the old server just before switching is not lost.
+3. **One backend.** The original app at `mahmoud35amri.github.io/Expenses-track` syncs with `https://spendly.mahmoudamri.me/api` too (CORS allows that origin), so every device shares the same data. The D1 database stays as it was, read-only in practice, as a backup.
+
+Opening an old device link on the new site works: replace `https://mahmoud35amri.github.io/Expenses-track/` with `https://spendly.mahmoudamri.me/`, or use *Paste a device link* in the app's settings. Once every device has synced, `LEGACY_API` can be removed. Until then, each new key costs one request to the old API, and the rate limit bounds that.
+
 ## Security boundaries
 
 | Who | Can do | Cannot do |

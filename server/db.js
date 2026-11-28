@@ -45,6 +45,7 @@ function sync(vault, changes, since) {
   };
 }
 
+const known = (vault) => db.prepare('SELECT 1 FROM vaults WHERE vault = ?').get(vault) !== undefined;
 const healthy = () => { try { db.prepare('SELECT 1 FROM vaults LIMIT 1').all(); return true; } catch { return false; } };
 
-module.exports = { db, sync, healthy };
+module.exports = { db, sync, known, healthy };

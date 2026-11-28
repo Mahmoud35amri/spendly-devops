@@ -21,7 +21,7 @@ Open these tabs: **https://spendly.mahmoudamri.me** (production), the GitHub rep
 | Time | Slide / screen | What to say |
 |---|---|---|
 | 0:00 | **Title**: Spendly, DevOps end to end | One sentence: an offline-first expense tracker whose sync API I ported to Node, then built, tested, scanned, containerized, deployed and observed automatically. |
-| 0:45 | **The app and the API** | PWA on the phone, changes queue offline, `POST /api/sync` pushes and pulls with a cursor, newest edit wins. 128 lines of API code (CI enforces < 150). Ported from Cloudflare Pages Functions because that runtime cannot run in Docker/K8s or expose metrics. |
+| 0:45 | **The app and the API** | PWA on the phone, changes queue offline, `POST /api/sync` pushes and pulls with a cursor, newest edit wins. 148 lines of API code (CI enforces < 150). Ported from Cloudflare Pages Functions because that runtime cannot run in Docker/K8s or expose metrics. |
 | 1:45 | **Architecture diagram** (from the README) | Device → Service (NodePort) → pod (Express + SQLite on a PVC) → Jaeger; Prometheus scrapes `/metrics`; Grafana reads Prometheus. |
 | 2:30 | **GitHub workflow**: Issues tab, then a PR | One issue per task (#8–#14), one PR per issue with *Closes #n*, CI must be green before merge, peer review on PR #… |
 | 3:30 | **Pipeline**: Actions run graph | `Build & test` ∥ `SAST` → `Docker image` → `Deploy to kind` + `DAST` → `Release` (main). Show the job summary: size guard, CodeQL count, ZAP alert list, published image tag, released version. |
@@ -72,6 +72,9 @@ The image job saves the exact image it built; the deploy job loads it into kind 
 
 **How is it deployed to the cloud?**
 k3s on an Oracle Cloud ARM VM runs the same base manifests plus a `production` overlay: Traefik Ingress, a Let's Encrypt certificate from cert-manager, `TRUST_PROXY=1`. On `main`, after kind and DAST pass, the release job runs `ssh deploy@server <commit>`. That key's forced command only deploys commits of `main`, pins `sha-<commit>` and runs `kubectl apply -k` with an account limited to the `spendly` namespace. CI then checks that `/api/health` reports the new version. Images are multi-arch because the VM is ARM.
+
+**What happened to the data on the old Cloudflare server?**
+It moves on its own. The first time the new server sees a sync key, it imports that key's records from the old API with the same key. If the old API is down, the sync fails before anything is stored, so the next sync retries. The app resets its cursor and re-uploads its data once when its server changes, because revision numbers differ between servers. The server keeps the newest copy of each record, so nothing is lost or duplicated.
 
 **What would you change for a bigger production?**
 A managed cluster with several nodes, a managed Postgres (several replicas), Argo CD pulling from Git instead of CI pushing over SSH, images pinned by digest and signed, and secrets from a secret manager.
