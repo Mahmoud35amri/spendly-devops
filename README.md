@@ -42,7 +42,7 @@
 | Docker | [Dockerfile](Dockerfile), [docker-compose.yml](docker-compose.yml) | |
 | Published image | GHCR, tags `latest` and `sha-<commit>`, pushed by CI on `main` | [Package page](https://github.com/Mahmoud35amri/spendly-devops/pkgs/container/spendly-devops) |
 | Kubernetes | [k8s/](k8s/) manifests, deployed to a fresh kind cluster on every pipeline run | CI job *Deploy to Kubernetes (kind)*, [kubectl-state.txt](docs/evidence/kubectl-state.txt) |
-| Cloud (bonus) | Same manifests + HTTPS Ingress on **k3s on Oracle Cloud**; each tested commit of `main` is released there by CI | **https://spendly.mahmoudamri.me**, CI job *Release to production*, [docs/CLOUD.md](docs/CLOUD.md) |
+| Cloud (bonus) | Same manifests + HTTPS Ingress on **k3s on Oracle Cloud**; each tested commit of `main` is released there by CI | **https://spendly.mahmoudamri.me**, CI job *Release to production*, [production.txt](docs/evidence/production.txt), [docs/CLOUD.md](docs/CLOUD.md) |
 | Documentation | This README, [openapi.yaml](openapi.yaml), [docs/](docs/) | |
 | Final report | [docs/REPORT.md](docs/REPORT.md) ([PDF](docs/REPORT.pdf)) | |
 

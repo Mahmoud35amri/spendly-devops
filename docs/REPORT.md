@@ -42,16 +42,17 @@ One workflow runs on every PR and every push to `main`: **Build & test** (instal
 
 ## 6. Kubernetes
 
-The manifests in `k8s/` are applied with `kubectl apply -k k8s`: a namespace with the **restricted** Pod Security level, a ConfigMap (no Secret is needed: keys live on devices), a 1 Gi PVC, the app Deployment (readiness and liveness probes on `/api/health`, requests and limits, `runAsNonRoot`, `readOnlyRootFilesystem`, seccomp), a NodePort Service, and Jaeger. Because SQLite allows a single writer on a `ReadWriteOnce` volume, the Deployment runs **1 replica with the `Recreate` strategy**; deleting the pod proves the data survives. kind publishes the NodePorts on `localhost:30080` (app) and `localhost:30686` (Jaeger).
+The manifests in `k8s/` are applied with `kubectl apply -k k8s`: a namespace with the **restricted** Pod Security level, a ConfigMap (no Secret needed), a 1 Gi PVC, the app Deployment (readiness and liveness probes on `/api/health`, requests and limits, `runAsNonRoot`, `readOnlyRootFilesystem`, seccomp), a NodePort Service, and Jaeger. SQLite allows one writer on a `ReadWriteOnce` volume, so the Deployment runs **1 replica with `Recreate`**; deleting the pod proves the data survives. kind publishes the app on `localhost:30080` and Jaeger on `:30686`.
 
-**Cloud (bonus).** The same base manifests run on a single-node **k3s cluster on an Oracle Cloud ARM VM**. A `production` overlay adds an Ingress (Traefik) with a Let's Encrypt certificate (cert-manager) and trusts one proxy hop for the client IP. CI deploys over SSH with a key whose *forced command* can only deploy a commit already on `main`. The account behind it is limited to the `spendly` namespace, where Pod Security `restricted` forbids host access. Existing users moved over automatically: the first sync of a key imports its records from the old Cloudflare API, and the app re-uploads its data once when its sync server changes.
+**Cloud (bonus).** The same base manifests run on a single-node **k3s cluster on an Oracle Cloud ARM VM**. A `production` overlay adds an Ingress (Traefik) with a Let's Encrypt certificate (cert-manager) and trusts one proxy hop for the client IP. CI deploys over SSH with a key whose *forced command* only deploys commits of `main`, through an account limited to the `spendly` namespace (Pod Security `restricted`: no host access). Existing users moved over automatically: a key's first sync imports its records from the old Cloudflare API.
 
 ## 7. Lessons learned
 
-1. **Rate limiting can break Kubernetes.** NodePort traffic is rewritten to the node's IP, the same IP the kubelet probes from. A limiter on `/api/health` would have answered probes with 429 under load (DAST is exactly that load) and pulled the pod out of service. The limiter now skips probes and scrapes, and a test guards it.
+1. **Rate limiting can break Kubernetes.** NodePort traffic is rewritten to the node's IP, the same IP the kubelet probes from. Limiting `/api/health` would answer probes with 429 under load (like DAST) and pull the pod out of service, so probes and scrapes are skipped, and a test guards it.
 2. **Check that your security gate can fail, and what it looks at.** My first CodeQL gate passed with 3 findings because of how SARIF encodes severity, and PR runs only looked at changed lines, hiding an XSS in older code until `main` was scanned.
-3. **Pin versions and read release notes.** Jaeger 2.23 dropped its legacy `/api`, so Grafana's Jaeger datasource and my first trace queries got 404s; `/api/v3` works.
-4. **Observability needs restraint.** The default HTTP logger wrote every header (including the sync key) and 1.5 KB per line; an allowlist fixed both. Labelling metrics by route template instead of the URL avoids unbounded series.
-5. **Portability is a design choice.** The Cloudflare version was simpler to deploy but impossible to containerize or observe. Keeping the contract stable made the port safe.
+3. **Pin versions and read release notes.** Jaeger 2.23 dropped its legacy `/api`: Grafana's Jaeger datasource and my first queries got 404s.
+4. **Observability needs restraint.** The default logger wrote every header (sync key included), 1.5 KB per line; an allowlist fixed both. Route-template labels keep metric series bounded.
+5. **Portability is a design choice.** Cloudflare was easy to deploy but impossible to containerize or observe.
+6. **Behind a proxy, the socket address is the proxy.** Production logs first showed Traefik's IP for every request. The fix needs `externalTrafficPolicy: Local`, one trusted hop (`TRUST_PROXY`) and logging `req.ip`.
 
-**Next steps:** Postgres to allow several replicas, GitOps (Argo CD) instead of the SSH push, Prometheus Operator with alerting in the cloud cluster, image signing (cosign) and digest pinning.
+**Next steps:** Postgres for several replicas, Argo CD instead of the SSH push, alerting, signed images (cosign).
