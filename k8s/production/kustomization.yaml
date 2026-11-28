@@ -1,0 +1,14 @@
+# Production: k3s on an Oracle Cloud VM, https://spendly.mahmoudamri.me (docs/CLOUD.md).
+# Applied on every release by the server's deploy script, with an account limited to the spendly namespace.
+# The cluster-wide pieces in cluster/ are applied once by an admin.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - ../base
+  - ingress.yaml
+patches:
+  - path: config-patch.yaml
+images:
+  # The deploy script sets the sha-<commit> tag that passed the pipeline.
+  - name: ghcr.io/mahmoud35amri/spendly-devops
+    newTag: latest

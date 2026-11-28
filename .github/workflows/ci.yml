@@ -112,12 +112,19 @@ jobs:
           path: image.tar
           retention-days: 1
 
-      - name: Push to ghcr.io (main only)
+      # The production server is ARM (Oracle Ampere), so the published image is multi-arch.
+      - uses: docker/setup-qemu-action@v4
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+      - uses: docker/setup-buildx-action@v4
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+
+      - name: Push to ghcr.io (main only, amd64 + arm64)
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         run: |
           echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
-          docker push --all-tags "$IMAGE"
-          echo "### Published \`$IMAGE:sha-${GITHUB_SHA::7}\` and \`$IMAGE:latest\`" >> "$GITHUB_STEP_SUMMARY"
+          docker buildx build --platform linux/amd64,linux/arm64 --build-arg APP_VERSION="sha-${GITHUB_SHA::7}" \
+            -t "$IMAGE:latest" -t "$IMAGE:sha-${GITHUB_SHA::7}" --push .
+          echo "### Published \`$IMAGE:sha-${GITHUB_SHA::7}\` and \`$IMAGE:latest\` (amd64, arm64)" >> "$GITHUB_STEP_SUMMARY"
 
   deploy:
     name: Deploy to Kubernetes (kind)
@@ -193,7 +200,7 @@ jobs:
           kubectl -n spendly logs deploy/spendly --tail=30
 
   release:
-    name: Release to production (Render)
+    name: Release to production (k3s, Oracle Cloud)
     # Only an image that passed tests, SAST, the kind deployment and DAST reaches production.
     needs: deploy
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
@@ -202,23 +209,26 @@ jobs:
       name: production
       url: https://spendly.mahmoudamri.me
     steps:
-      - name: Deploy this commit's image
+      - name: Deploy this commit
         env:
-          RENDER_DEPLOY_HOOK: ${{ secrets.RENDER_DEPLOY_HOOK }}
+          DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          DEPLOY_KNOWN_HOSTS: ${{ vars.DEPLOY_KNOWN_HOSTS }}
         run: |
-          # imgURL makes Render pull the exact tag this run tested, not whatever "latest" is by then.
-          img=$(jq -rn --arg v "ghcr.io/${GITHUB_REPOSITORY,,}:sha-${GITHUB_SHA::7}" '$v|@uri')
-          curl -fsS -o /dev/null -X POST "$RENDER_DEPLOY_HOOK&imgURL=$img"
+          install -m 700 -d ~/.ssh
+          printf '%s\n' "$DEPLOY_SSH_KEY" > ~/.ssh/id_ed25519 && chmod 600 ~/.ssh/id_ed25519
+          printf '%s\n' "$DEPLOY_KNOWN_HOSTS" > ~/.ssh/known_hosts
+          # The key can only run the server's deploy script, which accepts nothing but a commit of main:
+          # it checks out that commit, pins the image to sha-<commit> and applies k8s/production.
+          ssh deploy@spendly.mahmoudamri.me "$GITHUB_SHA"
 
-      - name: Wait until production serves this commit
+      - name: Check production serves this commit
         run: |
-          # The free instance may be asleep and the image pull takes a minute or two.
           want="sha-${GITHUB_SHA::7}"
-          for i in $(seq 1 60); do
-            got=$(curl -fsS --max-time 60 https://spendly.mahmoudamri.me/api/health | jq -r .version) || got=down
-            echo "attempt $i: $got"
+          for i in $(seq 1 30); do
+            got=$(curl -fsS --max-time 10 https://spendly.mahmoudamri.me/api/health | jq -r .version) || got=down
             [ "$got" = "$want" ] && break
-            sleep 10
+            sleep 5
           done
+          echo "production reports: $got"
           test "$got" = "$want"
           echo "### Released \`$want\` to https://spendly.mahmoudamri.me" >> "$GITHUB_STEP_SUMMARY"

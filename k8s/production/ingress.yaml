@@ -1,0 +1,26 @@
+# HTTPS entry point: k3s' Traefik routes the host to the Service; cert-manager gets and renews the
+# Let's Encrypt certificate into spendly-tls. Plain HTTP is redirected (middleware in cluster/).
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: spendly
+  namespace: spendly
+  annotations:
+    cert-manager.io/cluster-issuer: letsencrypt
+    traefik.ingress.kubernetes.io/router.middlewares: spendly-https-redirect@kubernetescrd
+spec:
+  ingressClassName: traefik
+  tls:
+    - hosts: [spendly.mahmoudamri.me]
+      secretName: spendly-tls
+  rules:
+    - host: spendly.mahmoudamri.me
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: spendly
+                port:
+                  name: http

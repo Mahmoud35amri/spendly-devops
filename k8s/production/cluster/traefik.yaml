@@ -1,0 +1,11 @@
+# k3s' bundled Traefik: keep the client's source IP. One node, so "Local" never drops traffic.
+apiVersion: helm.cattle.io/v1
+kind: HelmChartConfig
+metadata:
+  name: traefik
+  namespace: kube-system
+spec:
+  valuesContent: |-
+    service:
+      spec:
+        externalTrafficPolicy: Local
