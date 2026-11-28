@@ -1,12 +1,12 @@
 # Spendly: DevOps project report
 
-**Mahmoud Amri** · Repository: [github.com/Mahmoud35amri/spendly-devops](https://github.com/Mahmoud35amri/spendly-devops) · Image: `ghcr.io/mahmoud35amri/spendly-devops`
+**Mahmoud Amri** · Repository: [github.com/Mahmoud35amri/spendly-devops](https://github.com/Mahmoud35amri/spendly-devops) · Image: `ghcr.io/mahmoud35amri/spendly-devops` · Live: **https://spendly.mahmoudamri.me**
 
 ## 1. Service and architecture
 
 Spendly is an offline-first expense tracker (PWA). Every change is stored on the phone first and queued; a **sync API** then pushes the queued changes and pulls those made on other devices. The original API ran as a Cloudflare Pages Function on D1. Because that runtime cannot be containerized, deployed to Kubernetes or scraped by Prometheus, I **ported it to Node.js**: Express 5 and SQLite through Node's built-in `node:sqlite`. The contract stayed identical (`POST /api/sync`, `GET /api/health`, same JSON and status codes), so the PWA needed no change, and the SQL is unchanged because D1 is SQLite.
 
-The API is **127 lines of code** (`server/app.js` + `server/db.js`, enforced < 150 by CI). One sync is one SQLite transaction: reserve *n* revision numbers (`INSERT … ON CONFLICT … RETURNING`), upsert each change only if its `updatedAt` is newer (last write wins), and return everything after the client's cursor, 1000 records per page. A sync key identifies a private vault; only its SHA-256 hash is stored. The same process serves the PWA files from an allowlist.
+The API is **128 lines of code** (`server/app.js` + `server/db.js`, enforced < 150 by CI). One sync is one SQLite transaction: reserve *n* revision numbers (`INSERT … ON CONFLICT … RETURNING`), upsert each change only if its `updatedAt` is newer (last write wins), and return everything after the client's cursor, 1000 records per page. A sync key identifies a private vault; only its SHA-256 hash is stored. The same process serves the PWA files from an allowlist.
 
 **Runtime view:** device → Service (NodePort 30080) → pod (Express + SQLite on a PersistentVolumeClaim) → OTLP traces to Jaeger; Prometheus scrapes `/metrics`; Grafana reads Prometheus.
 
@@ -15,15 +15,15 @@ The API is **127 lines of code** (`server/app.js` + `server/db.js`, enforced < 1
 | Area | Tools |
 |---|---|
 | Code, tests | Node.js 24, Express 5, `node:sqlite`, `node:test` (12 integration tests on in-memory SQLite) |
-| Workflow | GitHub Issues (#8–#14), one branch + PR per task (#15–#23), PR template, squash merges |
-| CI/CD | GitHub Actions, GHCR, kind, kustomize |
+| Workflow | GitHub Issues (#8–#14, #25), one branch + PR per task (#15–#26), PR template, squash merges, branch protection |
+| CI/CD, cloud | GitHub Actions, GHCR (amd64 + arm64), kind, kustomize; k3s on Oracle Cloud, Traefik, cert-manager + Let's Encrypt |
 | Containers | Docker (single-stage `node:24-alpine`), docker compose |
 | Observability | prom-client, Prometheus 3, Grafana 13, pino, OpenTelemetry SDK, Jaeger 2 |
 | Security | CodeQL (SAST), OWASP ZAP (DAST), `npm audit`, helmet, express-rate-limit, Pod Security Standards |
 
 ## 3. CI/CD pipeline
 
-One workflow runs on every PR and every push to `main`: **Build & test** (install, size guard, tests, `npm audit`) and **SAST** (CodeQL) in parallel → **Docker image** (build, start the container and wait for `/api/health`; on `main`, push `latest` and `sha-<commit>` to GHCR) → **Deploy to Kubernetes** (create a kind cluster, load *the image built in this run*, pin the kustomization to `sha-<commit>`, `kubectl apply -k`, wait for the rollout, smoke-test health, sync, metrics and trace export) → **DAST** (ZAP against that deployment). Each job writes a summary; a PR can only be merged when everything is green.
+One workflow runs on every PR and every push to `main`: **Build & test** (install, size guard, tests, `npm audit`) and **SAST** (CodeQL) in parallel → **Docker image** (build, start the container and wait for `/api/health`; on `main`, push `latest` and `sha-<commit>` to GHCR) → **Deploy to Kubernetes** (create a kind cluster, load *the image built in this run*, pin the kustomization to `sha-<commit>`, `kubectl apply -k`, wait for the rollout, smoke-test health, sync, metrics and trace export) → **DAST** (ZAP against that deployment). On `main` only, **Release** deploys the same commit to production and passes only when `https://spendly.mahmoudamri.me/api/health` reports `sha-<commit>`. Each job writes a summary; a PR can only be merged when everything is green.
 
 ## 4. Observability
 
@@ -44,6 +44,8 @@ One workflow runs on every PR and every push to `main`: **Build & test** (instal
 
 The manifests in `k8s/` are applied with `kubectl apply -k k8s`: a namespace with the **restricted** Pod Security level, a ConfigMap (no Secret is needed: keys live on devices), a 1 Gi PVC, the app Deployment (readiness and liveness probes on `/api/health`, requests and limits, `runAsNonRoot`, `readOnlyRootFilesystem`, seccomp), a NodePort Service, and Jaeger. Because SQLite allows a single writer on a `ReadWriteOnce` volume, the Deployment runs **1 replica with the `Recreate` strategy**; deleting the pod proves the data survives. kind publishes the NodePorts on `localhost:30080` (app) and `localhost:30686` (Jaeger).
 
+**Cloud (bonus).** The same base manifests run on a single-node **k3s cluster on an Oracle Cloud ARM VM**. A `production` overlay adds an Ingress (Traefik) with a Let's Encrypt certificate (cert-manager) and trusts one proxy hop for the client IP. CI deploys over SSH with a key whose *forced command* can only deploy a commit already on `main`. The account behind it is limited to the `spendly` namespace, where Pod Security `restricted` forbids host access.
+
 ## 7. Lessons learned
 
 1. **Rate limiting can break Kubernetes.** NodePort traffic is rewritten to the node's IP, the same IP the kubelet probes from. A limiter on `/api/health` would have answered probes with 429 under load (DAST is exactly that load) and pulled the pod out of service. The limiter now skips probes and scrapes, and a test guards it.
@@ -52,4 +54,4 @@ The manifests in `k8s/` are applied with `kubectl apply -k k8s`: a namespace wit
 4. **Observability needs restraint.** The default HTTP logger wrote every header (including the sync key) and 1.5 KB per line; an allowlist fixed both. Labelling metrics by route template instead of the URL avoids unbounded series.
 5. **Portability is a design choice.** The Cloudflare version was simpler to deploy but impossible to containerize or observe. Keeping the contract stable made the port safe.
 
-**Next steps:** Postgres to allow several replicas, an Ingress with TLS on a cloud cluster with GitOps (Argo CD), Prometheus Operator with alerting, image signing (cosign) and digest pinning.
+**Next steps:** Postgres to allow several replicas, GitOps (Argo CD) instead of the SSH push, Prometheus Operator with alerting in the cloud cluster, image signing (cosign) and digest pinning.

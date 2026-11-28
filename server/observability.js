@@ -9,7 +9,8 @@ const logger = pino({ level: process.env.LOG_LEVEL ?? 'info' });
 const httpLogger = pinoHttp({
   logger,
   serializers: {
-    req: (req) => ({ id: req.id, method: req.method, url: req.url, ip: req.remoteAddress, userAgent: req.headers['user-agent'] }),
+    // raw.ip is Express' req.ip: the client's address, also behind a trusted proxy (TRUST_PROXY).
+    req: (req) => ({ id: req.id, method: req.method, url: req.url, ip: req.raw.ip ?? req.remoteAddress, userAgent: req.headers['user-agent'] }),
     res: (res) => ({ statusCode: res.statusCode }),
   },
   autoLogging: { ignore: (req) => req.url === '/metrics' || req.url === '/api/health' },

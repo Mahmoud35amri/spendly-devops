@@ -1,6 +1,7 @@
 // Integration tests for the sync API: the real Express app on a random port, SQLite in memory.
 process.env.DB_PATH = ':memory:';
 process.env.LOG_LEVEL ??= 'silent';
+process.env.TRUST_PROXY = '1'; // as in production, behind one reverse proxy
 const { test, before, after } = require('node:test');
 const assert = require('node:assert/strict');
 const { app } = require('../server/app');
@@ -121,4 +122,6 @@ test('rate limit covers every route except probes and scrapes', async () => {
   assert.ok(statuses.includes(429), 'static files are rate limited');
   assert.equal((await fetch(`${base}/api/health`)).status, 200);
   assert.equal((await fetch(`${base}/metrics`)).status, 200);
+  // Behind the proxy, each client keeps its own budget: the limit follows the forwarded client IP.
+  assert.equal((await fetch(`${base}/index.html`, { headers: { 'X-Forwarded-For': '203.0.113.7' } })).status, 200);
 });

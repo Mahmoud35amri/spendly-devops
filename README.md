@@ -2,6 +2,9 @@
 
 [![CI/CD](https://github.com/Mahmoud35amri/spendly-devops/actions/workflows/ci.yml/badge.svg)](https://github.com/Mahmoud35amri/spendly-devops/actions/workflows/ci.yml)
 [![Image](https://img.shields.io/badge/image-ghcr.io%2Fmahmoud35amri%2Fspendly--devops-blue?logo=docker)](https://github.com/Mahmoud35amri/spendly-devops/pkgs/container/spendly-devops)
+[![Live](https://img.shields.io/website?url=https%3A%2F%2Fspendly.mahmoudamri.me%2Fapi%2Fhealth&label=spendly.mahmoudamri.me)](https://spendly.mahmoudamri.me)
+
+**Live: https://spendly.mahmoudamri.me**, Kubernetes (k3s) on Oracle Cloud, released automatically from `main` ([docs/CLOUD.md](docs/CLOUD.md)).
 
 **Spendly** is an offline-first expense tracker (a PWA for iPhone) with a small **sync API**. This repository is a copy of [Expenses-track](https://github.com/Mahmoud35amri/Expenses-track) in which the sync API was ported from Cloudflare Pages Functions to **Node.js (Express 5 + SQLite)**, then taken through a complete DevOps chain: CI/CD, Docker, Kubernetes, observability and security scans.
 
@@ -13,7 +16,7 @@
 1. [Project requirements → where they are](#project-requirements--where-they-are)
 2. [Architecture](#architecture)
 3. [Repository layout](#repository-layout)
-4. [Run it](#run-it): [locally](#1-locally-with-nodejs), [Docker](#2-docker), [docker compose + observability](#3-docker-compose-with-the-observability-stack), [Kubernetes](#4-kubernetes-kind)
+4. [Run it](#run-it): [locally](#1-locally-with-nodejs), [Docker](#2-docker), [docker compose + observability](#3-docker-compose-with-the-observability-stack), [Kubernetes](#4-kubernetes-kind), [production](#5-production-k3s-on-oracle-cloud)
 5. [API](#api)
 6. [Observability](#observability)
 7. [Security](#security)
@@ -27,7 +30,7 @@
 | Requirement | Implementation | Evidence |
 |---|---|---|
 | Tasks in GitHub Issues | One issue per task, labels + milestone *DevOps project delivery* | [Issues #8–#14](https://github.com/Mahmoud35amri/spendly-devops/issues?q=is%3Aissue+milestone%3A%22DevOps+project+delivery%22) |
-| Small backend / REST API (< 150 lines) | `server/app.js` + `server/db.js`: **127 lines of code**, checked by CI | CI job summary *Backend size* |
+| Small backend / REST API (< 150 lines) | `server/app.js` + `server/db.js`: **128 lines of code**, checked by CI | CI job summary *Backend size* |
 | Git / GitHub | Feature branches, conventional commits, squash merges | [Commit history](https://github.com/Mahmoud35amri/spendly-devops/commits/main) |
 | One PR per task + peer review | PRs #15–#24, each linked to its issue, merged only when CI is green; [peer review guide](docs/PEER_REVIEW.md) | [Pull requests](https://github.com/Mahmoud35amri/spendly-devops/pulls?q=is%3Apr) |
 | CI/CD | GitHub Actions: build, test, scan, image, deploy, DAST | [Actions](https://github.com/Mahmoud35amri/spendly-devops/actions), [ci-pipeline.png](docs/evidence/ci-pipeline.png) |
@@ -39,6 +42,7 @@
 | Docker | [Dockerfile](Dockerfile), [docker-compose.yml](docker-compose.yml) | |
 | Published image | GHCR, tags `latest` and `sha-<commit>`, pushed by CI on `main` | [Package page](https://github.com/Mahmoud35amri/spendly-devops/pkgs/container/spendly-devops) |
 | Kubernetes | [k8s/](k8s/) manifests, deployed to a fresh kind cluster on every pipeline run | CI job *Deploy to Kubernetes (kind)*, [kubectl-state.txt](docs/evidence/kubectl-state.txt) |
+| Cloud (bonus) | Same manifests + HTTPS Ingress on **k3s on Oracle Cloud**; each tested commit of `main` is released there by CI | **https://spendly.mahmoudamri.me**, CI job *Release to production*, [docs/CLOUD.md](docs/CLOUD.md) |
 | Documentation | This README, [openapi.yaml](openapi.yaml), [docs/](docs/) | |
 | Final report | [docs/REPORT.md](docs/REPORT.md) ([PDF](docs/REPORT.pdf)) | |
 
@@ -68,6 +72,7 @@ flowchart LR
 - **One process serves both** the PWA files (an allowlist, never the server code or the database) and the API, so the app calls `/api/sync` on its own origin.
 - **Sync**: each device sends the records it changed and receives everything changed after its cursor. In one SQLite transaction the server reserves revision numbers, upserts the changes (the newest `updatedAt` wins) and reads the next page (max 1000 records).
 - **Privacy**: a random sync key identifies a vault; only its SHA-256 hash is stored.
+- **Production** is the same Kubernetes setup on a k3s cluster in Oracle Cloud, behind Traefik with a Let's Encrypt certificate: see [docs/CLOUD.md](docs/CLOUD.md).
 - Prometheus and Grafana run in **docker compose**. In Kubernetes the app and Jaeger run, and `/metrics` is reachable through the Service (the pod also carries the usual `prometheus.io/*` scrape annotations).
 
 ## Repository layout
@@ -115,7 +120,7 @@ Node 22 prints `ExperimentalWarning: SQLite is an experimental feature` once; No
 ```sh
 docker build -t spendly .
 docker run -d --name spendly -p 3000:3000 -v spendly-data:/data spendly
-curl localhost:3000/api/health          # {"ok":true,"db":true}
+curl localhost:3000/api/health          # {"ok":true,"db":true,"version":"dev"}
 docker logs -f spendly                  # JSON logs
 
 # or the published image
@@ -160,10 +165,19 @@ Skip the `docker build` / `kind load` lines to let the cluster pull the publishe
 | Manifest | Contents |
 |---|---|
 | [namespace.yaml](k8s/namespace.yaml) | namespace `spendly`, Pod Security **restricted** enforced |
-| [config.yaml](k8s/config.yaml) | ConfigMap: log level, rate limit, OTLP endpoint (the app has no secrets) |
-| [app.yaml](k8s/app.yaml) | PVC 1 Gi, Deployment (1 replica, `Recreate`, probes, limits, hardened securityContext), NodePort Service |
-| [jaeger.yaml](k8s/jaeger.yaml) | Jaeger all-in-one + Service (OTLP 4318, UI 30686) |
-| [kustomization.yaml](k8s/kustomization.yaml) | ties them together; CI pins the image tag to the commit |
+| [base/config.yaml](k8s/base/config.yaml) | ConfigMap: log level, rate limit, OTLP endpoint (the app has no secrets) |
+| [base/app.yaml](k8s/base/app.yaml) | PVC 1 Gi, Deployment (1 replica, `Recreate`, probes, limits, hardened securityContext), NodePort Service |
+| [base/jaeger.yaml](k8s/base/jaeger.yaml) | Jaeger all-in-one + Service (OTLP 4318, UI 30686) |
+| [kustomization.yaml](k8s/kustomization.yaml) | kind: namespace + base; CI pins the image tag to the commit |
+| [production/](k8s/production/) | base + HTTPS Ingress + `TRUST_PROXY`; `cluster/` (one-time admin setup) and `deploy.sh` (the release script), see [docs/CLOUD.md](docs/CLOUD.md) |
+
+### 5. Production (k3s on Oracle Cloud)
+
+**https://spendly.mahmoudamri.me** is the same app on a single-node k3s cluster on an Oracle Cloud ARM VM, behind Traefik with a Let's Encrypt certificate and a persistent volume. Nobody deploys by hand: the pipeline's *release* job deploys each commit of `main` that passed every check. Setup, security boundaries and operations: [docs/CLOUD.md](docs/CLOUD.md).
+
+```sh
+curl https://spendly.mahmoudamri.me/api/health     # {"ok":true,"db":true,"version":"sha-<commit on main>"}
+```
 
 ## API
 
@@ -171,7 +185,7 @@ Full contract: [openapi.yaml](openapi.yaml) (paste it into [editor.swagger.io](h
 
 | Method | Path | Auth | Description |
 |---|---|---|---|
-| `GET` | `/api/health` | – | `{"ok":true,"db":true}`; used by Docker and Kubernetes probes |
+| `GET` | `/api/health` | – | `{"ok":true,"db":true,"version":"sha-…"}` (`version` = image tag); used by probes and by the release check |
 | `POST` | `/api/sync` | `Authorization: Bearer <sync key>` | push changes, pull everything after `since` |
 | `GET` | `/metrics` | – | Prometheus metrics |
 | `GET` | `/`, `/app.js`, … | – | the PWA files (allowlist) |
@@ -276,20 +290,22 @@ flowchart LR
   S["SAST<br/>CodeQL"] --> I
   I["Docker image<br/>build · smoke test<br/>push to GHCR (main)"] --> D
   D["Deploy to Kubernetes (kind)<br/>apply -k · rollout · smoke test"] --> Z["DAST<br/>OWASP ZAP API scan"]
+  Z --> R["Release (main)<br/>k3s on Oracle Cloud<br/>check /api/health version"]
 ```
 
 | Job | Steps | Fails when |
 |---|---|---|
 | **Build & test** | `npm ci`; size guard (API ≤ 150 lines of code); `node --test` (API tests + widget self-check); `npm audit` | a test fails, the API grows past 150 lines, a high-severity vulnerable dependency |
 | **SAST (CodeQL)** | CodeQL init + analyze, SARIF to the Security tab and as an artifact, findings in the job summary | any CodeQL finding |
-| **Docker image** | build `latest` + `sha-<commit>`, start the container and wait for `/api/health`, save the image for the next job; **on `main`**: push both tags to `ghcr.io` | the build fails or the container never becomes healthy |
+| **Docker image** | build `latest` + `sha-<commit>`, start the container and wait for `/api/health`, save the image for the next job; **on `main`**: push both tags to `ghcr.io` for amd64 and arm64 | the build fails or the container never becomes healthy |
 | **Deploy to Kubernetes (kind)** | create a kind cluster, load *this* image, pin the kustomization to `sha-<commit>`, `kubectl apply -k`, wait for the rollouts, smoke test (health, sync, metrics, traces in Jaeger), then the **DAST** scan | rollout timeout, failed smoke test, High risk ZAP alert |
+| **Release to production** (`main` only) | `ssh deploy@spendly.mahmoudamri.me <commit>`: the key's forced command deploys that commit of `main` to k3s on Oracle Cloud; then wait until `https://spendly.mahmoudamri.me/api/health` reports `sha-<commit>` | the rollout fails, or production does not serve the new version |
 
 Each job writes a short summary on the run page (size, CodeQL findings, published tags, ZAP alerts). Artifacts: `codeql-sarif`, `zap-report`.
 
 ![Pipeline run](docs/evidence/ci-pipeline.png)
 
-The deployment target is a fresh kind cluster in the runner on every run (the brief's local Kubernetes). Moving to a cloud cluster would replace the kind steps with cluster credentials and a `kubectl apply -k k8s` on `main` only.
+Every run deploys to a fresh kind cluster in the runner (the brief's local Kubernetes); that is where the smoke test and DAST run. On `main`, the same commit then goes to the cloud cluster. A commit reaches production only after the whole chain passed, and the release is checked against the version production actually reports. The run page links to it through the GitHub environment **production**.
 
 ## GitHub workflow
 
@@ -311,6 +327,7 @@ The deployment target is a fresh kind cluster in the runner on every run (the br
 | #14 | #22 | Documentation, report, evidence |
 | #13 | #23 | Fix stored XSS found by the full CodeQL scan; full scan on PRs |
 | #9 | #24 | Document branch protection |
+| #25 | #26 | Cloud deployment: k3s on Oracle Cloud, HTTPS, release job |
 
 (Issues #1–#7 belonged to a first attempt on another codebase and were closed as *not planned*.)
 
@@ -321,6 +338,8 @@ The deployment target is a fresh kind cluster in the runner on every run (the br
 | `PORT` | `3000` | HTTP port |
 | `DB_PATH` | `data/spendly.db` (`/data/spendly.db` in the image) | SQLite file; `:memory:` for tests |
 | `RATE_LIMIT_PER_MIN` | `120` | requests per minute per IP (every route except `/api/health` and `/metrics`) |
+| `TRUST_PROXY` | unset | number of reverse-proxy hops to trust for the client IP (`1` in production, behind Traefik) |
+| `APP_VERSION` | `dev` | reported by `/api/health`; the image sets it to `sha-<commit>` (build arg) |
 | `LOG_LEVEL` | `info` | pino level (`silent` in tests) |
 | `OTEL_SERVICE_NAME` | `spendly` (image) | service name in traces |
 | `OTEL_EXPORTER_OTLP_ENDPOINT` | `http://localhost:4318` | where traces go (Jaeger) |

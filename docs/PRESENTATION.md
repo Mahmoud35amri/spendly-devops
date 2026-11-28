@@ -14,22 +14,23 @@ kubectl --context kind-spendly apply -k k8s
 node scripts/traffic.js http://localhost:3000 600 &    # keeps the dashboard alive
 ```
 
-Open these tabs: the GitHub repo (Issues, Pull requests, Actions), the latest CI run, Grafana `http://localhost:3001`, Jaeger `http://localhost:16686`, the app `http://localhost:30080`, and the ZAP report from the run artifacts.
+Open these tabs: **https://spendly.mahmoudamri.me** (production), the GitHub repo (Issues, Pull requests, Actions), the latest CI run with its *Release* job, Grafana `http://localhost:3001`, Jaeger `http://localhost:16686`, the app `http://localhost:30080`, and the ZAP report from the run artifacts.
 
 ## Timeline
 
 | Time | Slide / screen | What to say |
 |---|---|---|
 | 0:00 | **Title**: Spendly, DevOps end to end | One sentence: an offline-first expense tracker whose sync API I ported to Node, then built, tested, scanned, containerized, deployed and observed automatically. |
-| 0:45 | **The app and the API** | PWA on the phone, changes queue offline, `POST /api/sync` pushes and pulls with a cursor, newest edit wins. 123 lines of API code (CI enforces < 150). Ported from Cloudflare Pages Functions because that runtime cannot run in Docker/K8s or expose metrics. |
+| 0:45 | **The app and the API** | PWA on the phone, changes queue offline, `POST /api/sync` pushes and pulls with a cursor, newest edit wins. 128 lines of API code (CI enforces < 150). Ported from Cloudflare Pages Functions because that runtime cannot run in Docker/K8s or expose metrics. |
 | 1:45 | **Architecture diagram** (from the README) | Device → Service (NodePort) → pod (Express + SQLite on a PVC) → Jaeger; Prometheus scrapes `/metrics`; Grafana reads Prometheus. |
 | 2:30 | **GitHub workflow**: Issues tab, then a PR | One issue per task (#8–#14), one PR per issue with *Closes #n*, CI must be green before merge, peer review on PR #… |
-| 3:30 | **Pipeline**: Actions run graph | `Build & test` ∥ `SAST` → `Docker image` → `Deploy to kind` + `DAST`. Show the job summary: size guard, CodeQL count, ZAP alert list, published image tag. |
+| 3:30 | **Pipeline**: Actions run graph | `Build & test` ∥ `SAST` → `Docker image` → `Deploy to kind` + `DAST` → `Release` (main). Show the job summary: size guard, CodeQL count, ZAP alert list, published image tag, released version. |
 | 4:30 | **Demo: Kubernetes** | `kubectl --context kind-spendly -n spendly get pods,svc,pvc`; open the app on `:30080`, add an expense; `kubectl delete pod -l app=spendly` and show the data survives (PVC). |
-| 6:00 | **Demo: observability** | Grafana dashboard (rate, p95, errors, records synced). `docker compose logs app \| tail -3`: copy a `trace_id`, paste it in Jaeger, show the span tree down to `sync.transaction`. |
-| 7:30 | **Security** | CodeQL (Security tab, gate on error-level). ZAP API scan of the deployed service (gate on High). App controls: key checked before parsing, validation, helmet/CSP, rate limit, log allowlist. Pod: restricted, non-root, read-only FS. |
+| 5:30 | **Demo: production** | Open https://spendly.mahmoudamri.me (valid certificate). `curl https://spendly.mahmoudamri.me/api/health`: `version` is the last commit of `main`, released by CI after every check passed. Explain the deploy key's forced command and the namespace-only account. |
+| 6:15 | **Demo: observability** | Grafana dashboard (rate, p95, errors, records synced). `docker compose logs app \| tail -3`: copy a `trace_id`, paste it in Jaeger, show the span tree down to `sync.transaction`. |
+| 7:30 | **Security** | CodeQL (Security tab, any finding fails the build). ZAP API scan of the deployed service (gate on High). App controls: key checked before parsing, validation, helmet/CSP, rate limit, log allowlist. Pod: restricted, non-root, read-only FS. |
 | 8:45 | **Lessons learned** | 3 points from the report (rate limit vs. probes, Jaeger v2 API change, SQLite = 1 replica). |
-| 9:30 | **What I would do next** | Postgres to scale out, Helm/Argo CD to a cloud cluster, Prometheus Operator + alerts, image signing (cosign) and digest pinning. |
+| 9:30 | **What I would do next** | Postgres to scale out, Argo CD (pull-based GitOps) instead of the SSH push, Prometheus Operator + alerts in the cloud cluster, image signing (cosign) and digest pinning. |
 
 ## Q&A preparation
 
@@ -69,5 +70,8 @@ Medium/Low alerts on an HTTP-only local deployment are often informational (e.g.
 **How do you make sure the cluster runs the tested image?**
 The image job saves the exact image it built; the deploy job loads it into kind and pins the kustomization to `sha-<commit>`. On `main` the same tag is pushed to GHCR.
 
-**What would change for a cloud deployment?**
-A managed cluster (GKE/EKS/AKS), an Ingress with TLS, the image pulled from GHCR by digest, secrets from the cloud secret manager, a managed Postgres, and a GitOps tool (Argo CD) applying the manifests.
+**How is it deployed to the cloud?**
+k3s on an Oracle Cloud ARM VM runs the same base manifests plus a `production` overlay: Traefik Ingress, a Let's Encrypt certificate from cert-manager, `TRUST_PROXY=1`. On `main`, after kind and DAST pass, the release job runs `ssh deploy@server <commit>`. That key's forced command only deploys commits of `main`, pins `sha-<commit>` and runs `kubectl apply -k` with an account limited to the `spendly` namespace. CI then checks that `/api/health` reports the new version. Images are multi-arch because the VM is ARM.
+
+**What would you change for a bigger production?**
+A managed cluster with several nodes, a managed Postgres (several replicas), Argo CD pulling from Git instead of CI pushing over SSH, images pinned by digest and signed, and secrets from a secret manager.
