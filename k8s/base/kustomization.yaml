@@ -1,0 +1,8 @@
+# The application, shared by the kind cluster (k8s/) and production (k8s/production/).
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: spendly
+resources:
+  - config.yaml
+  - app.yaml
+  - jaeger.yaml

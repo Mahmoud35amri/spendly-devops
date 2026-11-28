@@ -36,6 +36,8 @@ function parseChanges(body) {
 }
 
 const app = express();
+// Behind a cloud load balancer the client IP arrives in X-Forwarded-For; TRUST_PROXY = number of proxy hops to trust.
+if (process.env.TRUST_PROXY) app.set('trust proxy', Number(process.env.TRUST_PROXY));
 app.use(httpLogger, metricsMiddleware);
 // Per-IP limit on every route except probes and scrapes: with a NodePort they come from the node IP, like client
 // traffic, and a 429 on a probe would take the pod out of service.
@@ -58,7 +60,8 @@ api.use((req, res, next) => {
   res.set('Cache-Control', 'no-store');
   if (req.method === 'OPTIONS') res.status(204).end(); else next();
 });
-api.get('/health', (_req, res) => res.json({ ok: true, db: healthy() }));
+// version = the image tag (set at build time), so a deploy can check that the new release is the one answering.
+api.get('/health', (_req, res) => res.json({ ok: true, db: healthy(), version: process.env.APP_VERSION ?? 'dev' }));
 // The key is checked before the body is parsed, so anonymous clients cannot make the server read 3 MB.
 api.post('/sync', (req, res, next) => {
   const auth = req.get('Authorization') ?? '';

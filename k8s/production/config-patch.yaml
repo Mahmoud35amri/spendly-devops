@@ -1,0 +1,8 @@
+# Behind Traefik: trust one proxy hop, so the rate limit and the logs see the client's IP.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: spendly-config
+  namespace: spendly
+data:
+  TRUST_PROXY: "1"

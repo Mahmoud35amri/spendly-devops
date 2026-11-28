@@ -1,0 +1,30 @@
+# The identity CI deploys with: full control inside the spendly namespace, nothing outside it.
+# With Pod Security "restricted" on the namespace, it cannot start privileged pods or mount host paths.
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: deployer
+  namespace: spendly
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: deployer-admin
+  namespace: spendly
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: admin
+subjects:
+  - kind: ServiceAccount
+    name: deployer
+    namespace: spendly
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: deployer-token
+  namespace: spendly
+  annotations:
+    kubernetes.io/service-account.name: deployer
+type: kubernetes.io/service-account-token
