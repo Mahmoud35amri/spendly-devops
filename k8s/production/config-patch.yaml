@@ -1,4 +1,5 @@
-# Behind Traefik: trust one proxy hop, so the rate limit and the logs see the client's IP.
+# TRUST_PROXY: behind Traefik, trust one proxy hop, so the rate limit and the logs see the client's IP.
+# LEGACY_API: the previous sync server (Cloudflare); a sync key seen for the first time gets its data from there.
 apiVersion: v1
 kind: ConfigMap
 metadata:
@@ -6,3 +7,4 @@ metadata:
   namespace: spendly
 data:
   TRUST_PROXY: "1"
+  LEGACY_API: https://spendly-m35a.pages.dev/api

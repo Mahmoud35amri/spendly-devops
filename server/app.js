@@ -3,7 +3,7 @@ const path = require('node:path');
 const express = require('express');
 const helmet = require('helmet');
 const { rateLimit } = require('express-rate-limit');
-const { db, sync, healthy } = require('./db');
+const { db, sync, known, healthy } = require('./db');
 const { logger, httpLogger, metricsMiddleware, metricsHandler, syncRecords, traced } = require('./observability');
 
 const ROOT = path.join(__dirname, '..');
@@ -33,6 +33,28 @@ function parseChanges(body) {
     changes.push({ kind: c.kind, id: c.id, data, deleted: c.deleted ? 1 : 0, updatedAt: Math.floor(updatedAt) });
   }
   return { changes };
+}
+
+// Moving from the previous server: the first time a sync key is seen here, its records are copied from LEGACY_API
+// with that same key, so devices and device links from before the move keep their data. A failure throws (500)
+// before the vault exists, so the client's next sync retries the import.
+async function importLegacy(vault, auth) {
+  if (!process.env.LEGACY_API || known(vault)) return;
+  for (let since = 0, more = true; more;) {
+    const res = await fetch(`${process.env.LEGACY_API}/sync`, { method: 'POST', headers: { Authorization: auth, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ since, changes: [] }), signal: AbortSignal.timeout(15_000) });
+    if (!res.ok) throw new Error(`legacy sync API answered ${res.status}`);
+    const page = await res.json();
+    for (let i = 0; i < page.records.length; i += MAX_CHANGES) {
+      const { changes, error } = parseChanges({ changes: page.records.slice(i, i + MAX_CHANGES) });
+      if (error) throw new Error(`legacy record rejected: ${error}`);
+      sync(vault, changes, 0);
+    }
+    syncRecords.inc({ direction: 'import' }, page.records.length);
+    ({ cursor: since, more } = page);
+  }
+  sync(vault, [], 0); // records the vault even when the old server had nothing, so the import runs once
+  logger.info('imported a vault from the legacy sync API');
 }
 
 const app = express();
@@ -69,9 +91,10 @@ api.post('/sync', (req, res, next) => {
   if (!KEY_RE.test(key)) return res.status(401).json({ error: 'unauthorized' });
   res.locals.vault = crypto.createHash('sha256').update(key).digest('hex'); // the key itself is never stored
   next();
-}, express.json({ type: () => true, limit: '3mb' }), (req, res) => {
+}, express.json({ type: () => true, limit: '3mb' }), async (req, res) => {
   const { changes, status, error } = parseChanges(req.body);
   if (error) return res.status(status).json({ error });
+  await importLegacy(res.locals.vault, req.get('Authorization'));
   const since = Number.isInteger(req.body?.since) && req.body.since >= 0 ? req.body.since : 0;
   const result = traced('sync.transaction', (span) => {
     span.setAttributes({ 'spendly.changes.pushed': changes.length, 'spendly.since': since });

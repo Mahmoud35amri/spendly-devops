@@ -30,7 +30,7 @@
 | Requirement | Implementation | Evidence |
 |---|---|---|
 | Tasks in GitHub Issues | One issue per task, labels + milestone *DevOps project delivery* | [Issues #8–#14](https://github.com/Mahmoud35amri/spendly-devops/issues?q=is%3Aissue+milestone%3A%22DevOps+project+delivery%22) |
-| Small backend / REST API (< 150 lines) | `server/app.js` + `server/db.js`: **128 lines of code**, checked by CI | CI job summary *Backend size* |
+| Small backend / REST API (< 150 lines) | `server/app.js` + `server/db.js`: **148 lines of code**, checked by CI | CI job summary *Backend size* |
 | Git / GitHub | Feature branches, conventional commits, squash merges | [Commit history](https://github.com/Mahmoud35amri/spendly-devops/commits/main) |
 | One PR per task + peer review | PRs #15–#24, each linked to its issue, merged only when CI is green; [peer review guide](docs/PEER_REVIEW.md) | [Pull requests](https://github.com/Mahmoud35amri/spendly-devops/pulls?q=is%3Apr) |
 | CI/CD | GitHub Actions: build, test, scan, image, deploy, DAST | [Actions](https://github.com/Mahmoud35amri/spendly-devops/actions), [ci-pipeline.png](docs/evidence/ci-pipeline.png) |
@@ -110,7 +110,7 @@ flowchart LR
 ```sh
 npm ci
 npm start                      # http://localhost:3000 (PWA + API), data in data/spendly.db
-npm test                       # 12 tests: API integration tests + widget self-check
+npm test                       # 13 tests: API integration tests + widget self-check
 ```
 
 Node 22 prints `ExperimentalWarning: SQLite is an experimental feature` once; Node 24 does not. Without a Jaeger to send to, tracing simply drops spans; set `OTEL_SDK_DISABLED=true` to turn it off.
@@ -339,6 +339,7 @@ Every run deploys to a fresh kind cluster in the runner (the brief's local Kuber
 | `DB_PATH` | `data/spendly.db` (`/data/spendly.db` in the image) | SQLite file; `:memory:` for tests |
 | `RATE_LIMIT_PER_MIN` | `120` | requests per minute per IP (every route except `/api/health` and `/metrics`) |
 | `TRUST_PROXY` | unset | number of reverse-proxy hops to trust for the client IP (`1` in production, behind Traefik) |
+| `LEGACY_API` | unset | previous sync server; the first sync of a key not seen before imports its data from there ([docs/CLOUD.md](docs/CLOUD.md#moving-from-the-cloudflare-server)) |
 | `APP_VERSION` | `dev` | reported by `/api/health`; the image sets it to `sha-<commit>` (build arg) |
 | `LOG_LEVEL` | `info` | pino level (`silent` in tests) |
 | `OTEL_SERVICE_NAME` | `spendly` (image) | service name in traces |

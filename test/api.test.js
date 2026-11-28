@@ -4,6 +4,7 @@ process.env.LOG_LEVEL ??= 'silent';
 process.env.TRUST_PROXY = '1'; // as in production, behind one reverse proxy
 const { test, before, after } = require('node:test');
 const assert = require('node:assert/strict');
+const http = require('node:http');
 const { app } = require('../server/app');
 
 let server;
@@ -67,6 +68,37 @@ test('pages through large pulls with the cursor', async () => {
   assert.equal(page2.more, false);
   assert.equal(page2.cursor, 1500);
   assert.equal((await pull(key, 999999)).records.length, 1000); // cursor from another database: start over
+});
+
+test('imports a vault from the previous server the first time its key is seen', async () => {
+  const key = keyOf('m');
+  const seen = [];
+  let down = true;
+  // Fake previous server: down for the first call, then answers in two pages.
+  const legacy = http.createServer(async (req, res) => {
+    let body = '';
+    for await (const chunk of req) body += chunk;
+    const { since } = JSON.parse(body);
+    seen.push([req.headers.authorization, since]);
+    if (down) { down = false; return res.writeHead(503).end(); }
+    const page = since === 0
+      ? { cursor: 1, more: true, records: [{ ...expense('old-1', 5, { amount: 9 }), deleted: false, rev: 1 }] }
+      : { cursor: 2, more: false, records: [{ kind: 'expense', id: 'old-2', updatedAt: 6, deleted: true, data: null, rev: 2 }] };
+    res.writeHead(200, { 'Content-Type': 'application/json' }).end(JSON.stringify(page));
+  });
+  await new Promise((resolve) => legacy.listen(0, '127.0.0.1', resolve));
+  process.env.LEGACY_API = `http://127.0.0.1:${legacy.address().port}/api`;
+  try {
+    // Old server unreachable: the sync fails and no vault is created, so the next sync tries again.
+    assert.equal((await post({ since: 0, changes: [] }, key)).status, 500);
+    const { records } = await pull(key);
+    assert.deepEqual(records.map((r) => [r.id, r.deleted, r.data]), [['old-1', false, { amount: 9 }], ['old-2', true, null]]);
+    await pull(key); // the key is known now: no second import
+    assert.deepEqual(seen, [[`Bearer ${key}`, 0], [`Bearer ${key}`, 0], [`Bearer ${key}`, 1]]);
+  } finally {
+    delete process.env.LEGACY_API;
+    legacy.close();
+  }
 });
 
 test('validates the payload', async () => {

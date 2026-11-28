@@ -6,7 +6,7 @@
 
 Spendly is an offline-first expense tracker (PWA). Every change is stored on the phone first and queued; a **sync API** then pushes the queued changes and pulls those made on other devices. The original API ran as a Cloudflare Pages Function on D1. Because that runtime cannot be containerized, deployed to Kubernetes or scraped by Prometheus, I **ported it to Node.js**: Express 5 and SQLite through Node's built-in `node:sqlite`. The contract stayed identical (`POST /api/sync`, `GET /api/health`, same JSON and status codes), so the PWA needed no change, and the SQL is unchanged because D1 is SQLite.
 
-The API is **128 lines of code** (`server/app.js` + `server/db.js`, enforced < 150 by CI). One sync is one SQLite transaction: reserve *n* revision numbers (`INSERT … ON CONFLICT … RETURNING`), upsert each change only if its `updatedAt` is newer (last write wins), and return everything after the client's cursor, 1000 records per page. A sync key identifies a private vault; only its SHA-256 hash is stored. The same process serves the PWA files from an allowlist.
+The API is **148 lines of code** (`server/app.js` + `server/db.js`, enforced < 150 by CI). One sync is one SQLite transaction: reserve *n* revision numbers (`INSERT … ON CONFLICT … RETURNING`), upsert each change only if its `updatedAt` is newer (last write wins), and return everything after the client's cursor, 1000 records per page. A sync key identifies a private vault; only its SHA-256 hash is stored. The same process serves the PWA files from an allowlist.
 
 **Runtime view:** device → Service (NodePort 30080) → pod (Express + SQLite on a PersistentVolumeClaim) → OTLP traces to Jaeger; Prometheus scrapes `/metrics`; Grafana reads Prometheus.
 
@@ -14,7 +14,7 @@ The API is **128 lines of code** (`server/app.js` + `server/db.js`, enforced < 1
 
 | Area | Tools |
 |---|---|
-| Code, tests | Node.js 24, Express 5, `node:sqlite`, `node:test` (12 integration tests on in-memory SQLite) |
+| Code, tests | Node.js 24, Express 5, `node:sqlite`, `node:test` (13 integration tests on in-memory SQLite) |
 | Workflow | GitHub Issues (#8–#14, #25), one branch + PR per task (#15–#26), PR template, squash merges, branch protection |
 | CI/CD, cloud | GitHub Actions, GHCR (amd64 + arm64), kind, kustomize; k3s on Oracle Cloud, Traefik, cert-manager + Let's Encrypt |
 | Containers | Docker (single-stage `node:24-alpine`), docker compose |
@@ -44,7 +44,7 @@ One workflow runs on every PR and every push to `main`: **Build & test** (instal
 
 The manifests in `k8s/` are applied with `kubectl apply -k k8s`: a namespace with the **restricted** Pod Security level, a ConfigMap (no Secret is needed: keys live on devices), a 1 Gi PVC, the app Deployment (readiness and liveness probes on `/api/health`, requests and limits, `runAsNonRoot`, `readOnlyRootFilesystem`, seccomp), a NodePort Service, and Jaeger. Because SQLite allows a single writer on a `ReadWriteOnce` volume, the Deployment runs **1 replica with the `Recreate` strategy**; deleting the pod proves the data survives. kind publishes the NodePorts on `localhost:30080` (app) and `localhost:30686` (Jaeger).
 
-**Cloud (bonus).** The same base manifests run on a single-node **k3s cluster on an Oracle Cloud ARM VM**. A `production` overlay adds an Ingress (Traefik) with a Let's Encrypt certificate (cert-manager) and trusts one proxy hop for the client IP. CI deploys over SSH with a key whose *forced command* can only deploy a commit already on `main`. The account behind it is limited to the `spendly` namespace, where Pod Security `restricted` forbids host access.
+**Cloud (bonus).** The same base manifests run on a single-node **k3s cluster on an Oracle Cloud ARM VM**. A `production` overlay adds an Ingress (Traefik) with a Let's Encrypt certificate (cert-manager) and trusts one proxy hop for the client IP. CI deploys over SSH with a key whose *forced command* can only deploy a commit already on `main`. The account behind it is limited to the `spendly` namespace, where Pod Security `restricted` forbids host access. Existing users moved over automatically: the first sync of a key imports its records from the old Cloudflare API, and the app re-uploads its data once when its sync server changes.
 
 ## 7. Lessons learned
 
