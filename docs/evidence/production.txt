@@ -1,0 +1,76 @@
+# Production evidence: https://spendly.mahmoudamri.me (k3s on Oracle Cloud), captured 2026-11-28T01:40Z
+
+## GET /api/health
+{"ok":true,"db":true,"version":"sha-47c2c07"}
+
+## HTTP is redirected to HTTPS
+HTTP/1.1 308 Permanent Redirect
+Location: https://spendly.mahmoudamri.me/
+
+## TLS certificate
+subject=CN=spendly.mahmoudamri.me
+issuer=C=US, O=Let's Encrypt, CN=YR2
+notBefore=Nov 28 00:08:51 2026 GMT
+notAfter=Feb 26 00:08:50 2027 GMT
+
+## Security headers (GET /)
+HTTP/1.1 200 OK
+Content-Security-Policy: default-src 'self';base-uri 'self';font-src 'self' https: data:;form-action 'self';frame-ancestors 'self';img-src 'self' data:;object-src 'none';script-src 'self';script-src-attr 'none';style-src 'self' https: 'unsafe-inline'
+Cross-Origin-Opener-Policy: same-origin
+Cross-Origin-Resource-Policy: same-origin
+Referrer-Policy: no-referrer
+Strict-Transport-Security: max-age=31536000; includeSubDomains
+X-Content-Type-Options: nosniff
+X-Frame-Options: SAMEORIGIN
+
+## Cluster (admin view)
+NAME         STATUS   ROLES           AGE   VERSION        INTERNAL-IP   EXTERNAL-IP   OS-IMAGE             KERNEL-VERSION               CONTAINER-RUNTIME
+pfe-sender   Ready    control-plane   48m   v1.37.2+k3s1   10.0.0.110    <none>        Ubuntu 24.04.4 LTS   6.17.0-1020-oracle (arm64)   containerd://2.3.7-k3s1
+
+NAME                      READY   UP-TO-DATE   AVAILABLE   AGE   CONTAINERS   IMAGES                                             SELECTOR
+deployment.apps/jaeger    1/1     1            1           42m   jaeger       jaegertracing/jaeger:2.23.0                        app=jaeger
+deployment.apps/spendly   1/1     1            1           42m   spendly      ghcr.io/mahmoud35amri/spendly-devops:sha-47c2c07   app=spendly
+
+NAME                           READY   STATUS    RESTARTS   AGE     IP           NODE         NOMINATED NODE   READINESS GATES
+pod/jaeger-6ff7444b86-6txdh    1/1     Running   0          42m     10.42.0.15   pfe-sender   <none>           <none>
+pod/spendly-6fc8c7d75b-tdqvj   1/1     Running   0          4m36s   10.42.0.20   pfe-sender   <none>           <none>
+
+NAME              TYPE       CLUSTER-IP      EXTERNAL-IP   PORT(S)                          AGE   SELECTOR
+service/jaeger    NodePort   10.43.174.207   <none>        4318:30930/TCP,16686:30686/TCP   42m   app=jaeger
+service/spendly   NodePort   10.43.223.188   <none>        80:30080/TCP                     42m   app=spendly
+
+NAME                                CLASS     HOSTS                    ADDRESS      PORTS     AGE
+ingress.networking.k8s.io/spendly   traefik   spendly.mahmoudamri.me   10.0.0.110   80, 443   42m
+
+NAME                                      READY   SECRET        ISSUER        STATUS                                          AGE
+certificate.cert-manager.io/spendly-tls   True    spendly-tls   letsencrypt   Certificate is up to date and has not expired   42m
+
+NAME                                 STATUS   VOLUME                                     CAPACITY   ACCESS MODES   STORAGECLASS   VOLUMEATTRIBUTESCLASS   AGE   VOLUMEMODE
+persistentvolumeclaim/spendly-data   Bound    pvc-2fed5a3d-1fe8-4f6c-a8d7-9b078b6a0c96   1Gi        RWO            local-path     <unset>                 42m   Filesystem
+
+## Image running in production
+ghcr.io/mahmoud35amri/spendly-devops:sha-47c2c07
+
+## Resource use
+NAME                       CPU(cores)   MEMORY(bytes)   
+jaeger-6ff7444b86-6txdh    1m           13Mi            
+spendly-6fc8c7d75b-tdqvj   3m           33Mi            
+
+## The CI deploy account (namespace spendly only)
+can-i create deployments -n spendly  yes
+can-i create pods -n kube-system     no
+can-i patch namespaces               no
+can-i create clusterrolebindings     no
+
+## Release job of the last main run
+https://github.com/Mahmoud35amri/spendly-devops/actions/runs/46093498723
+configmap/spendly-config configured
+service/jaeger unchanged
+service/spendly unchanged
+persistentvolumeclaim/spendly-data unchanged
+deployment.apps/jaeger unchanged
+deployment.apps/spendly configured
+ingress.networking.k8s.io/spendly unchanged
+deployment "spendly" successfully rolled out
+deployed sha-47c2c07
+production reports: sha-47c2c07
